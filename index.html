@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>S24 Ultra Meeting Transcriber</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #151d2f;
+      --accent: #38bdf8;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding: 0.75rem;
+    }
+    header {
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 0.75rem;
+    }
+    h1 { font-size: 1.1rem; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+    .status { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 9999px; background: #334155; }
+    .status.online { background: #064e3b; color: #6ee7b7; }
+
+    #key-container {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    input[type="password"] {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid #334155;
+      color: var(--text);
+      padding: 0.6rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    #controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 0.8rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    #startBtn { background: var(--success); color: #022c22; }
+    #stopBtn { background: var(--danger); color: #450a0a; display: none; }
+    #saveKeyBtn { background: var(--card); color: var(--muted); border: 1px solid #334155; }
+
+    #audio-playback {
+      background: var(--card);
+      padding: 0.5rem;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      display: none;
+    }
+    audio { width: 100%; height: 36px; }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--card);
+      border-radius: 8px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .entry {
+      background: #1e293b;
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      border-left: 4px solid var(--accent);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+    .entry.overlap {
+      border-left-color: var(--warning);
+      color: #fde68a;
+    }
+    .time-badge {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: monospace;
+      margin-right: 0.4rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Meeting Transcriber <span id="statusBadge" class="status">Bereit</span></h1>
+  </header>
+
+  <div id="key-container">
+    <input type="password" id="apiKey" placeholder="Gemini API Key einfügen...">
+    <button id="saveKeyBtn" onclick="saveKey()">Speichern</button>
+  </div>
+
+  <div id="controls">
+    <button id="startBtn" onclick="startSession()">Aufnahme starten</button>
+    <button id="stopBtn" onclick="stopSession()">Stopp & Auswerten</button>
+  </div>
+
+  <div id="audio-playback">
+    <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem;">Lokale Audio-Aufzeichnung:</p>
+    <audio id="player" controls></audio>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    let socket;
+    let audioContext;
+    let processor;
+    let mediaStream;
+    let mediaRecorder;
+    let audioChunks = [];
+    let startTime;
+    let timerInterval;
+
+    // Gespeicherten API-Key automatisch laden
+    window.onload = () => {
+      const savedKey = localStorage.getItem("gemini_live_api_key");
+      if (savedKey) document.getElementById("apiKey").value = savedKey;
+    };
+
+    function saveKey() {
+      const key = document.getElementById("apiKey").value.trim();
+      localStorage.setItem("gemini_live_api_key", key);
+      alert("API-Key gespeichert!");
+    }
+
+    function getElapsedTime() {
+      if (!startTime) return "00:00";
+      const totalSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      return `${minutes}:${seconds}`;
+    }
+
+    async function startSession() {
+      const apiKey = document.getElementById("apiKey").value.trim();
+      if (!apiKey) {
+        alert("Bitte zuerst einen Gemini API-Key eingeben.");
+        return;
+      }
+
+      document.getElementById("audio-playback").style.display = "none";
+      audioChunks = [];
+
+      // 1. WebSocket Verbindung zu Gemini Live API (v1alpha)
+      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      socket = new WebSocket(url);
+
+      socket.onopen = () => {
+        document.getElementById("statusBadge").className = "status online";
+        document.getElementById("statusBadge").innerText = "Live";
+
+        // Setup-Paket an Gemini senden
+        const setup = {
+          setup: {
+            model: "models/gemini-2.0-flash-exp",
+            generation_config: {
+              response_modalities: ["TEXT"],
+              temperature: 0.1
+            },
+            system_instruction: {
+              parts: [{
+                text: "Du bist ein präziser Transkribent für Besprechungen über Lautsprecher. " +
+                      "Unterscheide Sprecher streng nach Stimmfarbe und Tonlage. " +
+                      "Kennzeichne sie mit [Sprecher A], [Sprecher B] usw. " +
+                      "Wenn mehrere Personen durcheinanderreden, unverständlich nuscheln oder Lärm auftritt, gib exakt: " +
+                      "'[Stimmengewirr / Unverständlich]' aus. " +
+                      "Schreibe fortlaufend den erkannten Text, ohne Begrüßung und ohne Füllwörter."
+              }]
+            }
+          }
+        };
+        socket.send(JSON.stringify(setup));
+      };
+
+      socket.onmessage = async (event) => {
+        try {
+          const response = JSON.parse(event.data);
+          const parts = response?.serverContent?.modelTurn?.parts;
+          if (parts) {
+            for (const part of parts) {
+              if (part.text) appendTranscript(part.text);
+            }
+          }
+        } catch (e) {
+          console.error("Parse-Fehler:", e);
+        }
+      };
+
+      socket.onclose = () => {
+        document.getElementById("statusBadge").className = "status";
+        document.getElementById("statusBadge").innerText = "Getrennt";
+      };
+
+      // 2. Hardware-Mikrofonzugriff (S24 Ultra optimiert)
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      } catch (err) {
+        alert("Mikrofonzugriff verweigert oder HTTPS fehlt: " + err);
+        return;
+      }
+
+      // Parallele lokale Aufnahme für die spätere Wiedergabe
+      mediaRecorder = new MediaRecorder(mediaStream);
+      mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+      mediaRecorder.start();
+
+      // AudioContext zur PCM16-Extraktion (16000 Hz)
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      
+      // 4096 Samples bei 16 kHz = ~256 ms Datenpakete
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+        const float32 = e.inputBuffer.getChannelData(0);
+        const int16 = new Int16Array(float32.length);
+
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        // Base64-Kodierung des PCM-Puffers
+        let binary = '';
+        const bytes = new Uint8Array(int16.buffer);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const b64Data = window.btoa(binary);
+
+        const chunk = {
+          realtime_input: {
+            media_chunks: [{
+              mime_type: "audio/pcm;rate=16000",
+              data: b64Data
+            }]
+          }
+        };
+        socket.send(JSON.stringify(chunk));
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      startTime = Date.now();
+      document.getElementById("startBtn").style.display = "none";
+      document.getElementById("stopBtn").style.display = "flex";
+    }
+
+    function stopSession() {
+      if (processor) processor.disconnect();
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      if (audioContext) audioContext.close();
+      if (socket) socket.close();
+
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          const audioUrl = URL.createObjectURL(blob);
+          const player = document.getElementById("player");
+          player.src = audioUrl;
+          document.getElementById("audio-playback").style.display = "block";
+        };
+        mediaRecorder.stop();
+      }
+
+      document.getElementById("startBtn").style.display = "flex";
+      document.getElementById("stopBtn").style.display = "none";
+    }
+
+    function appendTranscript(rawText) {
+      const log = document.getElementById("log");
+      const div = document.createElement("div");
+      
+      const isOverlap = rawText.includes("Stimmengewirr") || rawText.includes("Unverständlich");
+      div.className = `entry ${isOverlap ? 'overlap' : ''}`;
+
+      const timeSpan = document.createElement("span");
+      timeSpan.className = "time-badge";
+      timeSpan.innerText = `[${getElapsedTime()}]`;
+
+      div.appendChild(timeSpan);
+      div.appendChild(document.createTextNode(rawText));
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+  </script>
+</body>
+</html>
