@@ -2,330 +2,893 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>S24 Ultra Meeting Transcriber</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gemini Live Transkription & Sprechererkennung</title>
   <style>
     :root {
-      --bg: #090d16;
-      --card: #151d2f;
-      --accent: #38bdf8;
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-      --danger: #ef4444;
-      --success: #10b981;
-      --warning: #f59e0b;
+      --bg-primary: #0a0e17;
+      --bg-surface: #131b2e;
+      --bg-card: #1c2640;
+      --border-color: #2a3b61;
+      --text-main: #f0f4fc;
+      --text-muted: #8b9bb4;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --speaker-a: #60a5fa;
+      --speaker-b: #34d399;
+      --speaker-c: #f472b6;
+      --speaker-d: #fbbf24;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      line-height: 1.5;
       display: flex;
       flex-direction: column;
+      height: 100vh;
       height: 100dvh;
-      padding: 0.75rem;
+      overflow: hidden;
     }
+
     header {
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #1e293b;
-      margin-bottom: 0.75rem;
-    }
-    h1 { font-size: 1.1rem; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
-    .status { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 9999px; background: #334155; }
-    .status.online { background: #064e3b; color: #6ee7b7; }
-
-    #key-container {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 16px;
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-    input[type="password"] {
-      flex: 1;
-      background: var(--card);
-      border: 1px solid #334155;
-      color: var(--text);
-      padding: 0.6rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
     }
 
-    #controls {
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title-area h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background-color: rgba(139, 155, 180, 0.15);
+      color: var(--text-muted);
+      border: 1px solid rgba(139, 155, 180, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .badge-status.connecting {
+      background-color: rgba(245, 158, 11, 0.15);
+      color: var(--accent-amber);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-status.live {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: var(--accent-red);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .badge-status.processing {
+      background-color: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+      border-color: rgba(6, 182, 212, 0.4);
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    .badge-status.live .badge-dot {
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.8); }
+    }
+
+    .api-input-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .api-input {
+      flex: 1;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .api-input:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .btn-key-save {
+      background-color: var(--border-color);
+      color: #fff;
+      border: none;
+      padding: 0 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .controls-panel {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
+      gap: 12px;
     }
-    button {
-      border: none;
-      border-radius: 8px;
-      padding: 0.8rem;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
+
+    .btn-action {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.4rem;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    #startBtn { background: var(--success); color: #022c22; }
-    #stopBtn { background: var(--danger); color: #450a0a; display: none; }
-    #saveKeyBtn { background: var(--card); color: var(--muted); border: 1px solid #334155; }
 
-    #audio-playback {
-      background: var(--card);
-      padding: 0.5rem;
-      border-radius: 8px;
-      margin-bottom: 0.75rem;
+    .btn-start {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+    }
+
+    .btn-start:disabled {
+      background: #1e293b;
+      color: #475569;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-stop {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: #fff;
+    }
+
+    .btn-stop:disabled {
+      background: #1e293b;
+      color: #475569;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .audio-player-container {
+      background-color: var(--bg-surface);
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border-color);
       display: none;
     }
-    audio { width: 100%; height: 36px; }
 
-    #log {
+    .audio-player-container.visible {
+      display: block;
+    }
+
+    audio {
+      width: 100%;
+      height: 36px;
+      border-radius: 6px;
+    }
+
+    main {
       flex: 1;
       overflow-y: auto;
-      background: var(--card);
-      border-radius: 8px;
-      padding: 0.75rem;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 0.6rem;
+      gap: 12px;
+      scroll-behavior: smooth;
     }
-    .entry {
-      background: #1e293b;
-      padding: 0.6rem 0.8rem;
-      border-radius: 6px;
-      border-left: 4px solid var(--accent);
-      font-size: 0.9rem;
-      line-height: 1.4;
+
+    .summary-card {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+      border: 1px solid var(--accent-cyan);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      display: none;
+      animation: fadeIn 0.3s ease-in-out;
     }
-    .entry.overlap {
-      border-left-color: var(--warning);
-      color: #fde68a;
+
+    .summary-card.visible {
+      display: block;
     }
-    .time-badge {
-      font-size: 0.75rem;
-      color: var(--muted);
+
+    .summary-header {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .summary-content {
+      font-size: 0.88rem;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
+    .transcript-stream {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .transcript-item {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      animation: slideUp 0.2s ease-out;
+    }
+
+    .transcript-item.overlap {
+      border-color: var(--accent-amber);
+      background-color: rgba(245, 158, 11, 0.06);
+    }
+
+    .transcript-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .speaker-tag {
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .speaker-tag[data-speaker*="A"] { color: var(--speaker-a); border-left: 3px solid var(--speaker-a); }
+    .speaker-tag[data-speaker*="B"] { color: var(--speaker-b); border-left: 3px solid var(--speaker-b); }
+    .speaker-tag[data-speaker*="C"] { color: var(--speaker-c); border-left: 3px solid var(--speaker-c); }
+    .speaker-tag[data-speaker*="D"] { color: var(--speaker-d); border-left: 3px solid var(--speaker-d); }
+
+    .timestamp-btn {
       font-family: monospace;
-      margin-right: 0.4rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .timestamp-btn:hover, .timestamp-btn:active {
+      color: #fff;
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .overlap-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: auto;
+    }
+
+    .transcript-text {
+      font-size: 0.92rem;
+      color: var(--text-main);
+      word-break: break-word;
+    }
+
+    .error-banner {
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--accent-red);
+      color: #fca5a5;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      display: none;
+    }
+
+    .error-banner.visible {
+      display: block;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>Meeting Transcriber <span id="statusBadge" class="status">Bereit</span></h1>
+    <div class="header-top">
+      <div class="title-area">
+        <h1>Gemini Transcriber</h1>
+      </div>
+      <div id="statusBadge" class="badge-status">
+        <span class="badge-dot"></span>
+        <span id="statusText">Bereit</span>
+      </div>
+    </div>
+
+    <div class="api-input-group">
+      <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key eintragen..." autocomplete="off">
+      <button id="saveKeyBtn" class="btn-key-save">Speichern</button>
+    </div>
+
+    <div class="controls-panel">
+      <button id="startBtn" class="btn-action btn-start">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        Aufnahme
+      </button>
+      <button id="stopBtn" class="btn-action btn-stop" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+        Stoppen
+      </button>
+    </div>
   </header>
 
-  <div id="key-container">
-    <input type="password" id="apiKey" placeholder="Gemini API Key einfügen...">
-    <button id="saveKeyBtn" onclick="saveKey()">Speichern</button>
+  <div id="audioPlayerContainer" class="audio-player-container">
+    <audio id="audioPlayback" controls preload="metadata"></audio>
   </div>
 
-  <div id="controls">
-    <button id="startBtn" onclick="startSession()">Aufnahme starten</button>
-    <button id="stopBtn" onclick="stopSession()">Stopp & Auswerten</button>
-  </div>
+  <main id="mainScroll">
+    <div id="errorBanner" class="error-banner"></div>
 
-  <div id="audio-playback">
-    <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem;">Lokale Audio-Aufzeichnung:</p>
-    <audio id="player" controls></audio>
-  </div>
+    <section id="summaryBox" class="summary-card">
+      <div class="summary-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Besprechungs-Zusammenfassung
+      </div>
+      <div id="summaryContent" class="summary-content">Erstelle Zusammenfassung...</div>
+    </section>
 
-  <div id="log"></div>
+    <section id="transcriptContainer" class="transcript-stream"></section>
+  </main>
 
   <script>
-    let socket;
-    let audioContext;
-    let processor;
-    let mediaStream;
-    let mediaRecorder;
-    let audioChunks = [];
-    let startTime;
-    let timerInterval;
+    (() => {
+      'use strict';
 
-    // Gespeicherten API-Key automatisch laden
-    window.onload = () => {
-      const savedKey = localStorage.getItem("gemini_live_api_key");
-      if (savedKey) document.getElementById("apiKey").value = savedKey;
-    };
+      // Inline AudioWorklet Code für exakte Blockung und Konvertierung
+      const WORKLET_CODE = `
+        class PcmProcessor extends AudioWorkletProcessor {
+          constructor() {
+            super();
+            this.bufferSize = 4096; // ~256ms bei 16000Hz
+            this.buffer = new Float32Array(this.bufferSize);
+            this.bytesWritten = 0;
+          }
 
-    function saveKey() {
-      const key = document.getElementById("apiKey").value.trim();
-      localStorage.setItem("gemini_live_api_key", key);
-      alert("API-Key gespeichert!");
-    }
+          process(inputs) {
+            const input = inputs[0];
+            if (!input || !input[0]) return true;
+            const channel = input[0];
 
-    function getElapsedTime() {
-      if (!startTime) return "00:00";
-      const totalSeconds = Math.floor((Date.now() - startTime) / 1000);
-      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-      const seconds = String(totalSeconds % 60).padStart(2, '0');
-      return `${minutes}:${seconds}`;
-    }
+            for (let i = 0; i < channel.length; i++) {
+              this.buffer[this.bytesWritten++] = channel[i];
+              if (this.bytesWritten >= this.bufferSize) {
+                this.flush();
+              }
+            }
+            return true;
+          }
 
-    async function startSession() {
-      const apiKey = document.getElementById("apiKey").value.trim();
-      if (!apiKey) {
-        alert("Bitte zuerst einen Gemini API-Key eingeben.");
-        return;
+          flush() {
+            const pcm16 = new Int16Array(this.bytesWritten);
+            for (let i = 0; i < this.bytesWritten; i++) {
+              let s = Math.max(-1, Math.min(1, this.buffer[i]));
+              pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+            this.bytesWritten = 0;
+          }
+        }
+        registerProcessor('pcm-processor', PcmProcessor);
+      `;
+
+      // State Management
+      let audioCtx = null;
+      let micStream = null;
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let recordedBlobUrl = null;
+      let workletNode = null;
+      let scriptNode = null;
+      let websocket = null;
+      let wakeLock = null;
+      let recordingStartTime = 0;
+      let isRecording = false;
+      let isAwaitingSummary = false;
+      let textChunkBuffer = '';
+
+      // UI Elements
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const saveKeyBtn = document.getElementById('saveKeyBtn');
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const statusBadge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      const transcriptContainer = document.getElementById('transcriptContainer');
+      const summaryBox = document.getElementById('summaryBox');
+      const summaryContent = document.getElementById('summaryContent');
+      const errorBanner = document.getElementById('errorBanner');
+      const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+      const audioPlayback = document.getElementById('audioPlayback');
+      const mainScroll = document.getElementById('mainScroll');
+
+      // Init Key
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) {
+        apiKeyInput.value = savedKey;
       }
 
-      document.getElementById("audio-playback").style.display = "none";
-      audioChunks = [];
-
-      // 1. WebSocket Verbindung zu Gemini Live API (v1alpha)
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-      socket = new WebSocket(url);
-
-      socket.onopen = () => {
-        document.getElementById("statusBadge").className = "status online";
-        document.getElementById("statusBadge").innerText = "Live";
-
-        // Setup-Paket an Gemini senden
-        const setup = {
-          setup: {
-            model: "models/gemini-2.0-flash-exp",
-            generation_config: {
-              response_modalities: ["TEXT"],
-              temperature: 0.1
-            },
-            system_instruction: {
-              parts: [{
-                text: "Du bist ein präziser Transkribent für Besprechungen über Lautsprecher. " +
-                      "Unterscheide Sprecher streng nach Stimmfarbe und Tonlage. " +
-                      "Kennzeichne sie mit [Sprecher A], [Sprecher B] usw. " +
-                      "Wenn mehrere Personen durcheinanderreden, unverständlich nuscheln oder Lärm auftritt, gib exakt: " +
-                      "'[Stimmengewirr / Unverständlich]' aus. " +
-                      "Schreibe fortlaufend den erkannten Text, ohne Begrüßung und ohne Füllwörter."
-              }]
-            }
-          }
-        };
-        socket.send(JSON.stringify(setup));
-      };
-
-      socket.onmessage = async (event) => {
-        try {
-          const response = JSON.parse(event.data);
-          const parts = response?.serverContent?.modelTurn?.parts;
-          if (parts) {
-            for (const part of parts) {
-              if (part.text) appendTranscript(part.text);
-            }
-          }
-        } catch (e) {
-          console.error("Parse-Fehler:", e);
+      saveKeyBtn.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key) {
+          localStorage.setItem('gemini_api_key', key);
+          showError('API-Key erfolgreich lokal gespeichert.', false);
         }
-      };
+      });
 
-      socket.onclose = () => {
-        document.getElementById("statusBadge").className = "status";
-        document.getElementById("statusBadge").innerText = "Getrennt";
-      };
-
-      // 2. Hardware-Mikrofonzugriff (S24 Ultra optimiert)
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            sampleRate: 16000,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
-      } catch (err) {
-        alert("Mikrofonzugriff verweigert oder HTTPS fehlt: " + err);
-        return;
+      function setStatus(status, text) {
+        statusBadge.className = 'badge-status ' + status;
+        statusText.textContent = text;
       }
 
-      // Parallele lokale Aufnahme für die spätere Wiedergabe
-      mediaRecorder = new MediaRecorder(mediaStream);
-      mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-      mediaRecorder.start();
-
-      // AudioContext zur PCM16-Extraktion (16000 Hz)
-      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      const source = audioContext.createMediaStreamSource(mediaStream);
-      
-      // 4096 Samples bei 16 kHz = ~256 ms Datenpakete
-      processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-      processor.onaudioprocess = (e) => {
-        if (!socket || socket.readyState !== WebSocket.OPEN) return;
-
-        const float32 = e.inputBuffer.getChannelData(0);
-        const int16 = new Int16Array(float32.length);
-
-        for (let i = 0; i < float32.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32[i]));
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      function showError(msg, isError = true) {
+        errorBanner.textContent = msg;
+        errorBanner.style.backgroundColor = isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+        errorBanner.style.borderColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+        errorBanner.style.color = isError ? '#fca5a5' : '#6ee7b7';
+        errorBanner.classList.add('visible');
+        if (!isError) {
+          setTimeout(() => errorBanner.classList.remove('visible'), 3000);
         }
+      }
 
-        // Base64-Kodierung des PCM-Puffers
+      function clearError() {
+        errorBanner.classList.remove('visible');
+      }
+
+      async function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+          try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+          } catch (err) {
+            console.warn('Wake Lock konnte nicht aktiviert werden:', err);
+          }
+        }
+      }
+
+      function releaseWakeLock() {
+        if (wakeLock) {
+          wakeLock.release().catch(() => {});
+          wakeLock = null;
+        }
+      }
+
+      function arrayBufferToBase64(buffer) {
         let binary = '';
-        const bytes = new Uint8Array(int16.buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
           binary += String.fromCharCode(bytes[i]);
         }
-        const b64Data = window.btoa(binary);
-
-        const chunk = {
-          realtime_input: {
-            media_chunks: [{
-              mime_type: "audio/pcm;rate=16000",
-              data: b64Data
-            }]
-          }
-        };
-        socket.send(JSON.stringify(chunk));
-      };
-
-      source.connect(processor);
-      processor.connect(audioContext.destination);
-
-      startTime = Date.now();
-      document.getElementById("startBtn").style.display = "none";
-      document.getElementById("stopBtn").style.display = "flex";
-    }
-
-    function stopSession() {
-      if (processor) processor.disconnect();
-      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-      if (audioContext) audioContext.close();
-      if (socket) socket.close();
-
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(audioChunks, { type: "audio/webm" });
-          const audioUrl = URL.createObjectURL(blob);
-          const player = document.getElementById("player");
-          player.src = audioUrl;
-          document.getElementById("audio-playback").style.display = "block";
-        };
-        mediaRecorder.stop();
+        return window.btoa(binary);
       }
 
-      document.getElementById("startBtn").style.display = "flex";
-      document.getElementById("stopBtn").style.display = "none";
-    }
+      function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+      }
 
-    function appendTranscript(rawText) {
-      const log = document.getElementById("log");
-      const div = document.createElement("div");
-      
-      const isOverlap = rawText.includes("Stimmengewirr") || rawText.includes("Unverständlich");
-      div.className = `entry ${isOverlap ? 'overlap' : ''}`;
+      // JSON Parsing & Stream Handling
+      function processStreamedText(text) {
+        textChunkBuffer += text;
 
-      const timeSpan = document.createElement("span");
-      timeSpan.className = "time-badge";
-      timeSpan.innerText = `[${getElapsedTime()}]`;
+        if (isAwaitingSummary) {
+          summaryContent.textContent = textChunkBuffer;
+          mainScroll.scrollTop = 0;
+          return;
+        }
 
-      div.appendChild(timeSpan);
-      div.appendChild(document.createTextNode(rawText));
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
-    }
+        let lines = textChunkBuffer.split('\n');
+        textChunkBuffer = lines.pop(); // Unvollständige Zeile behalten
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          
+          let parsed = null;
+          try {
+            parsed = JSON.parse(trimmed);
+          } catch (e) {
+            // Regex Fallback für unsauber geschachtelte Zeilen
+            const jsonMatch = trimmed.match(/\{.*?\}/);
+            if (jsonMatch) {
+              try { parsed = JSON.parse(jsonMatch[0]); } catch (err) {}
+            }
+          }
+
+          if (parsed && (parsed.speaker || parsed.text)) {
+            renderTranscriptItem(parsed);
+          }
+        }
+      }
+
+      function renderTranscriptItem(data) {
+        const timeOffsetSec = Math.max(0, (Date.now() - recordingStartTime) / 1000);
+        const timeFormatted = formatTime(timeOffsetSec);
+
+        const item = document.createElement('div');
+        item.className = 'transcript-item' + (data.is_overlap ? ' overlap' : '');
+
+        const meta = document.createElement('div');
+        meta.className = 'transcript-meta';
+
+        const spk = document.createElement('span');
+        spk.className = 'speaker-tag';
+        spk.setAttribute('data-speaker', data.speaker || 'Unbekannt');
+        spk.textContent = data.speaker || 'Unbekannt';
+
+        const timeBtn = document.createElement('button');
+        timeBtn.className = 'timestamp-btn';
+        timeBtn.innerHTML = `⏱️ ${timeFormatted}`;
+        timeBtn.onclick = () => {
+          if (audioPlayback.src) {
+            audioPlayback.currentTime = timeOffsetSec;
+            audioPlayback.play();
+          }
+        };
+
+        meta.appendChild(spk);
+        meta.appendChild(timeBtn);
+
+        if (data.is_overlap) {
+          const overlap = document.createElement('span');
+          overlap.className = 'overlap-badge';
+          overlap.textContent = 'Überlappung';
+          meta.appendChild(overlap);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'transcript-text';
+        content.textContent = data.text || '';
+
+        item.appendChild(meta);
+        item.appendChild(content);
+        transcriptContainer.appendChild(item);
+
+        mainScroll.scrollTop = mainScroll.scrollHeight;
+      }
+
+      async function startLiveSession() {
+        clearError();
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+          showError('Bitte gib einen gültigen Gemini API-Key ein.');
+          return;
+        }
+
+        // Reset UI State
+        transcriptContainer.innerHTML = '';
+        summaryBox.classList.remove('visible');
+        summaryContent.textContent = 'Generiere Zusammenfassung...';
+        audioPlayerContainer.classList.remove('visible');
+        textChunkBuffer = '';
+        recordedChunks = [];
+        isAwaitingSummary = false;
+
+        setStatus('connecting', 'Verbinde Audio...');
+
+        try {
+          // 1. Audio Capture Initialisierung (Mono, 16kHz mit Filtern)
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: 1,
+              sampleRate: 16000,
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+
+          // 2. Paralleler Local MediaRecorder
+          let mimeType = 'audio/webm;codecs=opus';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = ''; // Fallback auf Default Container
+          }
+          mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+          };
+          mediaRecorder.start(1000);
+
+          // 3. Web Audio Kontext & Downstream Setup
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+
+          const source = audioCtx.createMediaStreamSource(micStream);
+
+          // 4. WebSocket Verbindungsaufbau
+          setStatus('connecting', 'Verbinde Gemini API...');
+          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          websocket = new WebSocket(wsUrl);
+
+          websocket.onopen = async () => {
+            // Live Handshake Protocol
+            const setupPayload = {
+              setup: {
+                model: 'models/gemini-2.0-flash-exp',
+                generation_config: {
+                  response_modalities: ['TEXT'],
+                  temperature: 0.1
+                },
+                system_instruction: {
+                  parts: [{
+                    text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil (Frequenz, Timbre, Dynamik) und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn aus dem Kontext reale Namen oder Rollen hervorgehen (z. B. 'Hallo Herr Meier', 'Als Projektleiter...'), übernimm diese Rollenbezeichnung präzise. 3. Wenn mehrere Stimmen gleichzeitig reden, Hintergrundlärm herrscht oder das Signal unverständlich ist, gib exakt den Marker '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Ausgabe zwingend als JSON-Objekt pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false} Gib niemals Begrüßungen, Markdown-Codeblöcke oder einleitende Texte aus, sondern nur rohes JSON."
+                  }]
+                }
+              }
+            };
+            websocket.send(JSON.stringify(setupPayload));
+
+            // Initialisiere Audio Worklet Pipeline
+            try {
+              const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
+              const blobUrl = URL.createObjectURL(blob);
+              await audioCtx.audioWorklet.addModule(blobUrl);
+              workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+
+              workletNode.port.onmessage = (event) => {
+                if (websocket && websocket.readyState === WebSocket.OPEN && !isAwaitingSummary) {
+                  const base64Data = arrayBufferToBase64(event.data);
+                  websocket.send(JSON.stringify({
+                    realtime_input: {
+                      media_chunks: [{
+                        mime_type: 'audio/pcm;rate=16000',
+                        data: base64Data
+                      }]
+                    }
+                  }));
+                }
+              };
+              source.connect(workletNode);
+              workletNode.connect(audioCtx.destination);
+            } catch (workletError) {
+              console.warn('AudioWorklet fehlgeschlagen, nutze ScriptProcessorNode Fallback:', workletError);
+              scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+              scriptNode.onaudioprocess = (e) => {
+                if (websocket && websocket.readyState === WebSocket.OPEN && !isAwaitingSummary) {
+                  const input = e.inputBuffer.getChannelData(0);
+                  const pcm16 = new Int16Array(input.length);
+                  for (let i = 0; i < input.length; i++) {
+                    let s = Math.max(-1, Math.min(1, input[i]));
+                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                  }
+                  const base64Data = arrayBufferToBase64(pcm16.buffer);
+                  websocket.send(JSON.stringify({
+                    realtime_input: {
+                      media_chunks: [{
+                        mime_type: 'audio/pcm;rate=16000',
+                        data: base64Data
+                      }]
+                    }
+                  }));
+                }
+              };
+              source.connect(scriptNode);
+              scriptNode.connect(audioCtx.destination);
+            }
+
+            recordingStartTime = Date.now();
+            isRecording = true;
+            await requestWakeLock();
+            setStatus('live', 'Live-Aufnahme');
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+          };
+
+          websocket.onmessage = (event) => {
+            try {
+              const resp = JSON.parse(event.data);
+              if (resp.serverContent?.modelTurn?.parts) {
+                for (const part of resp.serverContent.modelTurn.parts) {
+                  if (part.text) {
+                    processStreamedText(part.text);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Fehler beim Verarbeiten der Nachricht:', err);
+            }
+          };
+
+          websocket.onerror = (err) => {
+            console.error('WebSocket Error:', err);
+            showError('Verbindungsfehler zur Gemini API. Bitte Key und Netzwerk prüfen.');
+            stopLiveSession();
+          };
+
+          websocket.onclose = () => {
+            if (isRecording) {
+              stopLiveSession();
+            }
+          };
+
+        } catch (err) {
+          console.error(err);
+          let msg = 'Fehler beim Starten der Tonaufnahme.';
+          if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            msg += ' Mikrofon-Zugriff erfordert HTTPS.';
+          } else if (err.name === 'NotAllowedError') {
+            msg += ' Mikrofon-Berechtigung verweigert.';
+          }
+          showError(msg);
+          setStatus('', 'Bereit');
+          cleanupResources();
+        }
+      }
+
+      async function stopLiveSession() {
+        if (!isRecording && !isAwaitingSummary) return;
+        isRecording = false;
+        setStatus('processing', 'Verarbeite Zusammenfassung...');
+        stopBtn.disabled = true;
+
+        // 1. Audio Capture anhalten
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+        }
+        if (workletNode) { workletNode.disconnect(); workletNode = null; }
+        if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
+        if (audioCtx && audioCtx.state !== 'closed') {
+          audioCtx.close().catch(() => {});
+        }
+
+        // 2. Parallele Tonspur sichern und UI Player bereitstellen
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            if (recordedBlobUrl) URL.revokeObjectURL(recordedBlobUrl);
+            recordedBlobUrl = URL.createObjectURL(blob);
+            audioPlayback.src = recordedBlobUrl;
+            audioPlayerContainer.classList.add('visible');
+          };
+          mediaRecorder.stop();
+        }
+
+        releaseWakeLock();
+
+        // 3. Abschließende Besprechungs-Zusammenfassung anfordern
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+          isAwaitingSummary = true;
+          textChunkBuffer = '';
+          summaryBox.classList.add('visible');
+          summaryContent.textContent = 'Zusammenfassung wird von Gemini formuliert...';
+
+          const summaryPayload = {
+            client_content: {
+              turns: [{
+                role: 'user',
+                parts: [{
+                  text: 'Erstelle eine strukturierte Zusammenfassung der Besprechung: 1. Kernpunkte, 2. Beschlüsse, 3. Offene Aufgaben/To-Dos mit Zuordnung zu den Sprechern.'
+                }]
+              }],
+              turn_complete: true
+            }
+          };
+          websocket.send(JSON.stringify(summaryPayload));
+
+          // Nach Timeout Verbindung schließen
+          setTimeout(() => {
+            cleanupWebSocket();
+            setStatus('', 'Beendet');
+            startBtn.disabled = false;
+          }, 12000);
+        } else {
+          setStatus('', 'Beendet');
+          startBtn.disabled = false;
+        }
+      }
+
+      function cleanupWebSocket() {
+        if (websocket) {
+          websocket.onopen = null;
+          websocket.onmessage = null;
+          websocket.onerror = null;
+          websocket.onclose = null;
+          websocket.close();
+          websocket = null;
+        }
+      }
+
+      function cleanupResources() {
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        if (audioCtx && audioCtx.state !== 'closed') {
+          audioCtx.close().catch(() => {});
+        }
+        cleanupWebSocket();
+        releaseWakeLock();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      startBtn.addEventListener('click', startLiveSession);
+      stopBtn.addEventListener('click', stopLiveSession);
+
+      window.addEventListener('beforeunload', () => {
+        cleanupResources();
+      });
+    })();
   </script>
 </body>
 </html>
