@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Live Transkription & Sprechererkennung v0.2</title>
+  <title>Gemini Transcriber v0.3.0</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -60,13 +60,21 @@
     }
 
     .title-area h1 {
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
       color: #fff;
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+
+    .version-tag {
+      background-color: var(--accent-blue);
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 800;
     }
 
     .badge-status {
@@ -131,7 +139,6 @@
       border-radius: 8px;
       font-size: 0.85rem;
       outline: none;
-      transition: border-color 0.2s;
     }
 
     .api-input:focus {
@@ -223,7 +230,6 @@
       border: 1px solid var(--accent-cyan);
       border-radius: 12px;
       padding: 14px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
       display: none;
     }
 
@@ -302,10 +308,9 @@
       cursor: pointer;
     }
 
-    .timestamp-btn:hover, .timestamp-btn:active {
+    .timestamp-btn:active {
       color: #fff;
       background: var(--accent-blue);
-      border-color: var(--accent-blue);
     }
 
     .overlap-badge {
@@ -346,7 +351,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Transcriber v0.2</h1>
+        <h1>Gemini Transcriber <span class="version-tag">v0.3.0</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -525,10 +530,11 @@
         if (!isHandshakeComplete || isAwaitingSummary) return;
 
         const base64Data = arrayBufferToBase64(arrayBuffer);
+        // Exaktes CamelCase Schema für realtimeInput
         websocket.send(JSON.stringify({
-          realtime_input: {
-            media_chunks: [{
-              mime_type: 'audio/pcm;rate=16000',
+          realtimeInput: {
+            mediaChunks: [{
+              mimeType: 'audio/pcm;rate=16000',
               data: base64Data
             }]
           }
@@ -617,7 +623,7 @@
         clearError();
         const apiKey = apiKeyInput.value.trim();
         if (!apiKey) {
-          showError('Bitte hinterlege zuerst deinen Gemini API-Key.');
+          showError('Bitte hinterlege zuerst deinen Google AI Studio API-Key.');
           return;
         }
 
@@ -629,7 +635,7 @@
         isAwaitingSummary = false;
         isHandshakeComplete = false;
 
-        setStatus('connecting', 'Initialisiere Mikrofon...');
+        setStatus('connecting', 'Starte Audio & WebSocket...');
         startBtn.disabled = true;
 
         try {
@@ -667,7 +673,6 @@
             source.connect(workletNode);
             workletNode.connect(audioCtx.destination);
           } catch (workletError) {
-            console.warn('AudioWorklet Fallback zu ScriptProcessor:', workletError);
             scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
             scriptNode.onaudioprocess = (e) => {
               const input = e.inputBuffer.getChannelData(0);
@@ -682,20 +687,20 @@
             scriptNode.connect(audioCtx.destination);
           }
 
-          setStatus('connecting', 'Verbinde Gemini API...');
-          // Stabilere v1beta Route
+          // Offizieller v1beta WebSocket URL Endpoint
           const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
           websocket = new WebSocket(wsUrl);
 
           websocket.onopen = () => {
+            // Striktes Schema gemäß v1beta Live API RPC Spezifikation
             const setupPayload = {
               setup: {
                 model: 'models/gemini-2.0-flash-exp',
-                generation_config: {
-                  response_modalities: ['TEXT'],
+                generationConfig: {
+                  responseModalities: ['TEXT'],
                   temperature: 0.1
                 },
-                system_instruction: {
+                systemInstruction: {
                   parts: [{
                     text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn reale Namen/Rollen genannt werden, nutze diese. 3. Bei Stimmengewirr/Lärm gib '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Ausgabe zwingend als JSON pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false}. Gib nur reines JSON aus, kein Markdown."
                   }]
@@ -714,7 +719,7 @@
             try {
               const resp = JSON.parse(rawData);
 
-              // Handshake Bestätigung abfangen
+              // Setup Handshake Bestätigung
               if (resp.setupComplete || resp.setup_complete) {
                 isHandshakeComplete = true;
                 recordingStartTime = Date.now();
@@ -742,12 +747,15 @@
           };
 
           websocket.onclose = (e) => {
-            console.warn(`WebSocket geschlossen: Code=${e.code}, Reason=${e.reason}`);
+            console.warn(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
             if (isRecording || !isHandshakeComplete) {
-              if (e.code === 1008 || e.code === 1007) {
-                showError(`API-Fehler (${e.code}): Bitte prüfe den API-Key auf Gültigkeit.`);
+              let reasonMsg = e.reason ? ` (${e.reason})` : '';
+              if (e.code === 1008) {
+                showError(`API-Fehler (1008 Policy Violation): Modellname oder Key ungültig / Setup abgelehnt.${reasonMsg}`);
+              } else if (e.code === 1007) {
+                showError(`Format-Fehler (1007): Payload nicht konform.${reasonMsg}`);
               } else if (!e.wasClean) {
-                showError(`Verbindung unterbrochen (Code ${e.code}).`);
+                showError(`Verbindung getrennt (Code ${e.code}).${reasonMsg}`);
               }
               stopLiveSession(false);
             }
@@ -799,17 +807,17 @@
           isAwaitingSummary = true;
           textChunkBuffer = '';
           summaryBox.classList.add('visible');
-          summaryContent.textContent = 'Zusammenfassung wird geladen...';
+          summaryContent.textContent = 'Zusammenfassung wird generiert...';
 
           websocket.send(JSON.stringify({
-            client_content: {
+            clientContent: {
               turns: [{
                 role: 'user',
                 parts: [{
                   text: 'Erstelle eine strukturierte Zusammenfassung der Besprechung: 1. Kernpunkte, 2. Beschlüsse, 3. Offene Aufgaben/To-Dos mit Zuordnung zu den Sprechern.'
                 }]
               }],
-              turn_complete: true
+              turnComplete: true
             }
           }));
 
