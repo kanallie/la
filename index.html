@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Transcriber v0.4.0</title>
+  <title>Gemini Transcriber v0.4.1</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -351,7 +351,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Transcriber <span class="version-tag">v0.4.0</span></h1>
+        <h1>Gemini Transcriber <span class="version-tag">v0.4.1</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -525,32 +525,27 @@
         return `${m}:${s}`;
       }
 
-      // Live Model Auto-Discovery
+      // Modellauflösung direkt gegen v1alpha
       async function resolveLiveModel(apiKey) {
         try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-          if (!res.ok) return 'models/gemini-2.0-flash-live-001';
-          const data = await res.json();
-          if (data && data.models) {
-            const bidiModels = data.models.filter(m => 
-              Array.isArray(m.supportedGenerationMethods) && 
-              m.supportedGenerationMethods.includes('bidiGenerateContent')
-            );
-            
-            // Bevorzuge aktuelle Live/Flash Varianten
-            const preferred = bidiModels.find(m => m.name.includes('gemini-2.0-flash-live')) ||
-                            bidiModels.find(m => m.name.includes('gemini-2.0-flash')) ||
-                            bidiModels.find(m => m.name.includes('live')) ||
-                            bidiModels[0];
-
-            if (preferred) {
-              return preferred.name;
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.models) {
+              const bidi = data.models.filter(m => 
+                Array.isArray(m.supportedGenerationMethods) && 
+                m.supportedGenerationMethods.includes('bidiGenerateContent')
+              );
+              const match = bidi.find(m => m.name.includes('gemini-2.0-flash-exp')) ||
+                            bidi.find(m => m.name.includes('gemini-2.0-flash')) ||
+                            bidi[0];
+              if (match) return match.name;
             }
           }
         } catch (e) {
-          console.warn('Model auto-discovery fehlgeschlagen, verwende Fallback:', e);
+          console.warn('Fallback zu Standard-Modell:', e);
         }
-        return 'models/gemini-2.0-flash-live-001';
+        return 'models/gemini-2.0-flash-exp';
       }
 
       function sendAudioChunk(arrayBuffer) {
@@ -662,7 +657,7 @@
         isAwaitingSummary = false;
         isHandshakeComplete = false;
 
-        setStatus('connecting', 'Prüfe Modell-Kompatibilität...');
+        setStatus('connecting', 'Ermittle Live-Modell...');
         startBtn.disabled = true;
 
         try {
@@ -717,8 +712,10 @@
             scriptNode.connect(audioCtx.destination);
           }
 
-          setStatus('connecting', `Verbinde (${resolvedModel.replace('models/', '')})...`);
-          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          setStatus('connecting', `Verbinde v1alpha (${resolvedModel.replace('models/', '')})...`);
+          
+          // Endpoint zwingend v1alpha für gemini-2.0-flash-exp
+          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
           websocket = new WebSocket(wsUrl);
 
           websocket.onopen = () => {
@@ -779,7 +776,7 @@
             if (isRecording || !isHandshakeComplete) {
               let reasonMsg = e.reason ? ` (${e.reason})` : '';
               if (e.code === 1008) {
-                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell nicht zugelassen oder abgelehnt.'}`);
+                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell oder Setup nicht zugelassen.'}`);
               } else if (e.code === 1007) {
                 showError(`Format-Fehler (1007): Payload nicht konform.${reasonMsg}`);
               } else if (!e.wasClean) {
