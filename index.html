@@ -366,3 +366,530 @@
 
     <div class="controls-panel">
       <button id="startBtn" class="btn-action btn-start">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        Aufnahme
+      </button>
+      <button id="stopBtn" class="btn-action btn-stop" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+        Stoppen
+      </button>
+    </div>
+  </header>
+
+  <div id="audioPlayerContainer" class="audio-player-container">
+    <audio id="audioPlayback" controls preload="metadata"></audio>
+  </div>
+
+  <main id="mainScroll">
+    <div id="errorBanner" class="error-banner"></div>
+
+    <section id="summaryBox" class="summary-card">
+      <div class="summary-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Besprechungs-Zusammenfassung
+      </div>
+      <div id="summaryContent" class="summary-content">Erstelle Zusammenfassung...</div>
+    </section>
+
+    <section id="transcriptContainer" class="transcript-stream"></section>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const WORKLET_CODE = `
+        class PcmProcessor extends AudioWorkletProcessor {
+          constructor() {
+            super();
+            this.bufferSize = 4096;
+            this.buffer = new Float32Array(this.bufferSize);
+            this.bytesWritten = 0;
+          }
+
+          process(inputs) {
+            const input = inputs[0];
+            if (!input || !input[0]) return true;
+            const channel = input[0];
+
+            for (let i = 0; i < channel.length; i++) {
+              this.buffer[this.bytesWritten++] = channel[i];
+              if (this.bytesWritten >= this.bufferSize) {
+                this.flush();
+              }
+            }
+            return true;
+          }
+
+          flush() {
+            const pcm16 = new Int16Array(this.bytesWritten);
+            for (let i = 0; i < this.bytesWritten; i++) {
+              let s = Math.max(-1, Math.min(1, this.buffer[i]));
+              pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+            this.bytesWritten = 0;
+          }
+        }
+        registerProcessor('pcm-processor', PcmProcessor);
+      `;
+
+      let audioCtx = null;
+      let micStream = null;
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let recordedBlobUrl = null;
+      let workletNode = null;
+      let scriptNode = null;
+      let websocket = null;
+      let wakeLock = null;
+      let recordingStartTime = 0;
+      let isRecording = false;
+      let isAwaitingSummary = false;
+      let isHandshakeComplete = false;
+      let textChunkBuffer = '';
+
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const saveKeyBtn = document.getElementById('saveKeyBtn');
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const statusBadge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      const transcriptContainer = document.getElementById('transcriptContainer');
+      const summaryBox = document.getElementById('summaryBox');
+      const summaryContent = document.getElementById('summaryContent');
+      const errorBanner = document.getElementById('errorBanner');
+      const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+      const audioPlayback = document.getElementById('audioPlayback');
+      const mainScroll = document.getElementById('mainScroll');
+
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) apiKeyInput.value = savedKey;
+
+      saveKeyBtn.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key) {
+          localStorage.setItem('gemini_api_key', key);
+          showError('API-Key erfolgreich gespeichert.', false);
+        }
+      });
+
+      function setStatus(status, text) {
+        statusBadge.className = 'badge-status ' + status;
+        statusText.textContent = text;
+      }
+
+      function showError(msg, isError = true) {
+        errorBanner.textContent = msg;
+        errorBanner.style.backgroundColor = isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+        errorBanner.style.borderColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+        errorBanner.style.color = isError ? '#fca5a5' : '#6ee7b7';
+        errorBanner.classList.add('visible');
+        if (!isError) {
+          setTimeout(() => errorBanner.classList.remove('visible'), 3000);
+        }
+      }
+
+      function clearError() {
+        errorBanner.classList.remove('visible');
+      }
+
+      async function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+          try {
+            wakeLock = await navigator.wakeLock.request('screen');
+          } catch (err) {}
+        }
+      }
+
+      function releaseWakeLock() {
+        if (wakeLock) {
+          wakeLock.release().catch(() => {});
+          wakeLock = null;
+        }
+      }
+
+      function arrayBufferToBase64(buffer) {
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return window.btoa(binary);
+      }
+
+      function formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      // Live Model Auto-Discovery
+      async function resolveLiveModel(apiKey) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+          if (!res.ok) return 'models/gemini-2.0-flash-live-001';
+          const data = await res.json();
+          if (data && data.models) {
+            const bidiModels = data.models.filter(m => 
+              Array.isArray(m.supportedGenerationMethods) && 
+              m.supportedGenerationMethods.includes('bidiGenerateContent')
+            );
+            
+            // Bevorzuge aktuelle Live/Flash Varianten
+            const preferred = bidiModels.find(m => m.name.includes('gemini-2.0-flash-live')) ||
+                            bidiModels.find(m => m.name.includes('gemini-2.0-flash')) ||
+                            bidiModels.find(m => m.name.includes('live')) ||
+                            bidiModels[0];
+
+            if (preferred) {
+              return preferred.name;
+            }
+          }
+        } catch (e) {
+          console.warn('Model auto-discovery fehlgeschlagen, verwende Fallback:', e);
+        }
+        return 'models/gemini-2.0-flash-live-001';
+      }
+
+      function sendAudioChunk(arrayBuffer) {
+        if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+        if (!isHandshakeComplete || isAwaitingSummary) return;
+
+        const base64Data = arrayBufferToBase64(arrayBuffer);
+        websocket.send(JSON.stringify({
+          realtimeInput: {
+            mediaChunks: [{
+              mimeType: 'audio/pcm;rate=16000',
+              data: base64Data
+            }]
+          }
+        }));
+      }
+
+      function processStreamedText(text) {
+        textChunkBuffer += text;
+
+        if (isAwaitingSummary) {
+          summaryContent.textContent = textChunkBuffer;
+          mainScroll.scrollTop = 0;
+          return;
+        }
+
+        let lines = textChunkBuffer.split('\n');
+        textChunkBuffer = lines.pop();
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          
+          let parsed = null;
+          try {
+            parsed = JSON.parse(trimmed);
+          } catch (e) {
+            const jsonMatch = trimmed.match(/\{.*?\}/);
+            if (jsonMatch) {
+              try { parsed = JSON.parse(jsonMatch[0]); } catch (err) {}
+            }
+          }
+
+          if (parsed && (parsed.speaker || parsed.text)) {
+            renderTranscriptItem(parsed);
+          }
+        }
+      }
+
+      function renderTranscriptItem(data) {
+        const timeOffsetSec = Math.max(0, (Date.now() - recordingStartTime) / 1000);
+        const timeFormatted = formatTime(timeOffsetSec);
+
+        const item = document.createElement('div');
+        item.className = 'transcript-item' + (data.is_overlap ? ' overlap' : '');
+
+        const meta = document.createElement('div');
+        meta.className = 'transcript-meta';
+
+        const spk = document.createElement('span');
+        spk.className = 'speaker-tag';
+        spk.setAttribute('data-speaker', data.speaker || 'Unbekannt');
+        spk.textContent = data.speaker || 'Unbekannt';
+
+        const timeBtn = document.createElement('button');
+        timeBtn.className = 'timestamp-btn';
+        timeBtn.innerHTML = `⏱️ ${timeFormatted}`;
+        timeBtn.onclick = () => {
+          if (audioPlayback.src) {
+            audioPlayback.currentTime = timeOffsetSec;
+            audioPlayback.play();
+          }
+        };
+
+        meta.appendChild(spk);
+        meta.appendChild(timeBtn);
+
+        if (data.is_overlap) {
+          const overlap = document.createElement('span');
+          overlap.className = 'overlap-badge';
+          overlap.textContent = 'Überlappung';
+          meta.appendChild(overlap);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'transcript-text';
+        content.textContent = data.text || '';
+
+        item.appendChild(meta);
+        item.appendChild(content);
+        transcriptContainer.appendChild(item);
+
+        mainScroll.scrollTop = mainScroll.scrollHeight;
+      }
+
+      async function startLiveSession() {
+        clearError();
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+          showError('Bitte hinterlege zuerst deinen Google AI Studio API-Key.');
+          return;
+        }
+
+        transcriptContainer.innerHTML = '';
+        summaryBox.classList.remove('visible');
+        audioPlayerContainer.classList.remove('visible');
+        textChunkBuffer = '';
+        recordedChunks = [];
+        isAwaitingSummary = false;
+        isHandshakeComplete = false;
+
+        setStatus('connecting', 'Prüfe Modell-Kompatibilität...');
+        startBtn.disabled = true;
+
+        try {
+          const resolvedModel = await resolveLiveModel(apiKey);
+
+          setStatus('connecting', 'Initialisiere Mikrofon...');
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: 1,
+              sampleRate: 16000,
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          });
+
+          let mimeType = 'audio/webm;codecs=opus';
+          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+          mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+          };
+          mediaRecorder.start(1000);
+
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+
+          const source = audioCtx.createMediaStreamSource(micStream);
+
+          try {
+            const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
+            await audioCtx.audioWorklet.addModule(blobUrl);
+            workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+            workletNode.port.onmessage = (event) => sendAudioChunk(event.data);
+            source.connect(workletNode);
+            workletNode.connect(audioCtx.destination);
+          } catch (workletError) {
+            scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+            scriptNode.onaudioprocess = (e) => {
+              const input = e.inputBuffer.getChannelData(0);
+              const pcm16 = new Int16Array(input.length);
+              for (let i = 0; i < input.length; i++) {
+                let s = Math.max(-1, Math.min(1, input[i]));
+                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              sendAudioChunk(pcm16.buffer);
+            };
+            source.connect(scriptNode);
+            scriptNode.connect(audioCtx.destination);
+          }
+
+          setStatus('connecting', `Verbinde (${resolvedModel.replace('models/', '')})...`);
+          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          websocket = new WebSocket(wsUrl);
+
+          websocket.onopen = () => {
+            const setupPayload = {
+              setup: {
+                model: resolvedModel,
+                generationConfig: {
+                  responseModalities: ['TEXT'],
+                  temperature: 0.1
+                },
+                systemInstruction: {
+                  parts: [{
+                    text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn reale Namen/Rollen genannt werden, nutze diese. 3. Bei Stimmengewirr/Lärm gib '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Ausgabe zwingend als JSON pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false}. Gib nur reines JSON aus, kein Markdown."
+                  }]
+                }
+              }
+            };
+            websocket.send(JSON.stringify(setupPayload));
+          };
+
+          websocket.onmessage = async (event) => {
+            let rawData = event.data;
+            if (rawData instanceof Blob) {
+              rawData = await rawData.text();
+            }
+
+            try {
+              const resp = JSON.parse(rawData);
+
+              if (resp.setupComplete || resp.setup_complete) {
+                isHandshakeComplete = true;
+                recordingStartTime = Date.now();
+                isRecording = true;
+                await requestWakeLock();
+                setStatus('live', 'Live-Aufnahme');
+                stopBtn.disabled = false;
+                return;
+              }
+
+              if (resp.serverContent?.modelTurn?.parts) {
+                for (const part of resp.serverContent.modelTurn.parts) {
+                  if (part.text) {
+                    processStreamedText(part.text);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('JSON Decode Fehler:', err, rawData);
+            }
+          };
+
+          websocket.onerror = (err) => {
+            console.error('WebSocket Error:', err);
+          };
+
+          websocket.onclose = (e) => {
+            console.warn(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
+            if (isRecording || !isHandshakeComplete) {
+              let reasonMsg = e.reason ? ` (${e.reason})` : '';
+              if (e.code === 1008) {
+                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell nicht zugelassen oder abgelehnt.'}`);
+              } else if (e.code === 1007) {
+                showError(`Format-Fehler (1007): Payload nicht konform.${reasonMsg}`);
+              } else if (!e.wasClean) {
+                showError(`Verbindung getrennt (Code ${e.code}).${reasonMsg}`);
+              }
+              stopLiveSession(false);
+            }
+          };
+
+        } catch (err) {
+          console.error(err);
+          let msg = 'Mikrofonfehler: ' + (err.message || err.name);
+          if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            msg += ' (HTTPS ist auf Mobilgeräten zwingend erforderlich!)';
+          }
+          showError(msg);
+          cleanupResources();
+          setStatus('', 'Bereit');
+        }
+      }
+
+      async function stopLiveSession(requestSummary = true) {
+        const wasActive = isRecording;
+        isRecording = false;
+        isHandshakeComplete = false;
+        stopBtn.disabled = true;
+
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        if (workletNode) { workletNode.disconnect(); workletNode = null; }
+        if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
+        if (audioCtx && audioCtx.state !== 'closed') {
+          audioCtx.close().catch(() => {});
+        }
+
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            if (recordedBlobUrl) URL.revokeObjectURL(recordedBlobUrl);
+            recordedBlobUrl = URL.createObjectURL(blob);
+            audioPlayback.src = recordedBlobUrl;
+            audioPlayerContainer.classList.add('visible');
+          };
+          mediaRecorder.stop();
+        }
+
+        releaseWakeLock();
+
+        if (wasActive && requestSummary && websocket && websocket.readyState === WebSocket.OPEN) {
+          setStatus('processing', 'Erstelle Zusammenfassung...');
+          isAwaitingSummary = true;
+          textChunkBuffer = '';
+          summaryBox.classList.add('visible');
+          summaryContent.textContent = 'Zusammenfassung wird geladen...';
+
+          websocket.send(JSON.stringify({
+            clientContent: {
+              turns: [{
+                role: 'user',
+                parts: [{
+                  text: 'Erstelle eine strukturierte Zusammenfassung der Besprechung: 1. Kernpunkte, 2. Beschlüsse, 3. Offene Aufgaben/To-Dos mit Zuordnung zu den Sprechern.'
+                }]
+              }],
+              turnComplete: true
+            }
+          }));
+
+          setTimeout(() => {
+            cleanupWebSocket();
+            setStatus('', 'Beendet');
+            startBtn.disabled = false;
+          }, 12000);
+        } else {
+          cleanupWebSocket();
+          setStatus('', 'Beendet');
+          startBtn.disabled = false;
+        }
+      }
+
+      function cleanupWebSocket() {
+        if (websocket) {
+          websocket.onopen = null;
+          websocket.onmessage = null;
+          websocket.onerror = null;
+          websocket.onclose = null;
+          websocket.close();
+          websocket = null;
+        }
+      }
+
+      function cleanupResources() {
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        if (audioCtx && audioCtx.state !== 'closed') {
+          audioCtx.close().catch(() => {});
+        }
+        cleanupWebSocket();
+        releaseWakeLock();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      startBtn.addEventListener('click', startLiveSession);
+      stopBtn.addEventListener('click', () => stopLiveSession(true));
+      window.addEventListener('beforeunload', cleanupResources);
+    })();
+  </script>
+</body>
+</html>
