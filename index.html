@@ -167,7 +167,6 @@
       border: none;
       cursor: pointer;
       touch-action: manipulation;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
 
     .btn-start {
@@ -179,7 +178,6 @@
       background: #1e293b;
       color: #475569;
       cursor: not-allowed;
-      box-shadow: none;
     }
 
     .btn-stop {
@@ -191,7 +189,6 @@
       background: #1e293b;
       color: #475569;
       cursor: not-allowed;
-      box-shadow: none;
     }
 
     .audio-player-container {
@@ -228,7 +225,6 @@
       padding: 14px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
       display: none;
-      animation: fadeIn 0.3s ease-in-out;
     }
 
     .summary-card.visible {
@@ -268,7 +264,6 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      animation: slideUp 0.2s ease-out;
     }
 
     .transcript-item.overlap {
@@ -305,9 +300,6 @@
       padding: 2px 6px;
       border-radius: 4px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
     }
 
     .timestamp-btn:hover, .timestamp-btn:active {
@@ -341,20 +333,11 @@
       font-size: 0.85rem;
       margin-bottom: 8px;
       display: none;
+      word-break: break-word;
     }
 
     .error-banner.visible {
       display: block;
-    }
-
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
     }
   </style>
 </head>
@@ -372,7 +355,7 @@
     </div>
 
     <div class="api-input-group">
-      <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key eintragen..." autocomplete="off">
+      <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key..." autocomplete="off">
       <button id="saveKeyBtn" class="btn-key-save">Speichern</button>
     </div>
 
@@ -410,12 +393,11 @@
     (() => {
       'use strict';
 
-      // Inline AudioWorklet Code für exakte Blockung und Konvertierung
       const WORKLET_CODE = `
         class PcmProcessor extends AudioWorkletProcessor {
           constructor() {
             super();
-            this.bufferSize = 4096; // ~256ms bei 16000Hz
+            this.bufferSize = 4096;
             this.buffer = new Float32Array(this.bufferSize);
             this.bytesWritten = 0;
           }
@@ -447,7 +429,6 @@
         registerProcessor('pcm-processor', PcmProcessor);
       `;
 
-      // State Management
       let audioCtx = null;
       let micStream = null;
       let mediaRecorder = null;
@@ -460,9 +441,9 @@
       let recordingStartTime = 0;
       let isRecording = false;
       let isAwaitingSummary = false;
+      let isHandshakeComplete = false;
       let textChunkBuffer = '';
 
-      // UI Elements
       const apiKeyInput = document.getElementById('apiKeyInput');
       const saveKeyBtn = document.getElementById('saveKeyBtn');
       const startBtn = document.getElementById('startBtn');
@@ -477,17 +458,14 @@
       const audioPlayback = document.getElementById('audioPlayback');
       const mainScroll = document.getElementById('mainScroll');
 
-      // Init Key
       const savedKey = localStorage.getItem('gemini_api_key');
-      if (savedKey) {
-        apiKeyInput.value = savedKey;
-      }
+      if (savedKey) apiKeyInput.value = savedKey;
 
       saveKeyBtn.addEventListener('click', () => {
         const key = apiKeyInput.value.trim();
         if (key) {
           localStorage.setItem('gemini_api_key', key);
-          showError('API-Key erfolgreich lokal gespeichert.', false);
+          showError('API-Key erfolgreich gespeichert.', false);
         }
       });
 
@@ -515,10 +493,7 @@
         if ('wakeLock' in navigator) {
           try {
             wakeLock = await navigator.wakeLock.request('screen');
-            wakeLock.addEventListener('release', () => { wakeLock = null; });
-          } catch (err) {
-            console.warn('Wake Lock konnte nicht aktiviert werden:', err);
-          }
+          } catch (err) {}
         }
       }
 
@@ -545,7 +520,21 @@
         return `${m}:${s}`;
       }
 
-      // JSON Parsing & Stream Handling
+      function sendAudioChunk(arrayBuffer) {
+        if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
+        if (!isHandshakeComplete || isAwaitingSummary) return;
+
+        const base64Data = arrayBufferToBase64(arrayBuffer);
+        websocket.send(JSON.stringify({
+          realtime_input: {
+            media_chunks: [{
+              mime_type: 'audio/pcm;rate=16000',
+              data: base64Data
+            }]
+          }
+        }));
+      }
+
       function processStreamedText(text) {
         textChunkBuffer += text;
 
@@ -556,7 +545,7 @@
         }
 
         let lines = textChunkBuffer.split('\n');
-        textChunkBuffer = lines.pop(); // Unvollständige Zeile behalten
+        textChunkBuffer = lines.pop();
 
         for (const line of lines) {
           const trimmed = line.trim();
@@ -566,7 +555,6 @@
           try {
             parsed = JSON.parse(trimmed);
           } catch (e) {
-            // Regex Fallback für unsauber geschachtelte Zeilen
             const jsonMatch = trimmed.match(/\{.*?\}/);
             if (jsonMatch) {
               try { parsed = JSON.parse(jsonMatch[0]); } catch (err) {}
@@ -629,23 +617,22 @@
         clearError();
         const apiKey = apiKeyInput.value.trim();
         if (!apiKey) {
-          showError('Bitte gib einen gültigen Gemini API-Key ein.');
+          showError('Bitte hinterlege zuerst deinen Gemini API-Key.');
           return;
         }
 
-        // Reset UI State
         transcriptContainer.innerHTML = '';
         summaryBox.classList.remove('visible');
-        summaryContent.textContent = 'Generiere Zusammenfassung...';
         audioPlayerContainer.classList.remove('visible');
         textChunkBuffer = '';
         recordedChunks = [];
         isAwaitingSummary = false;
+        isHandshakeComplete = false;
 
-        setStatus('connecting', 'Verbinde Audio...');
+        setStatus('connecting', 'Initialisiere Mikrofon...');
+        startBtn.disabled = true;
 
         try {
-          // 1. Audio Capture Initialisierung (Mono, 16kHz mit Filtern)
           micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               channelCount: 1,
@@ -656,18 +643,14 @@
             }
           });
 
-          // 2. Paralleler Local MediaRecorder
           let mimeType = 'audio/webm;codecs=opus';
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = ''; // Fallback auf Default Container
-          }
+          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
           mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0) recordedChunks.push(e.data);
           };
           mediaRecorder.start(1000);
 
-          // 3. Web Audio Kontext & Downstream Setup
           audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
           if (audioCtx.state === 'suspended') {
             await audioCtx.resume();
@@ -675,13 +658,36 @@
 
           const source = audioCtx.createMediaStreamSource(micStream);
 
-          // 4. WebSocket Verbindungsaufbau
+          try {
+            const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
+            await audioCtx.audioWorklet.addModule(blobUrl);
+            workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+            workletNode.port.onmessage = (event) => sendAudioChunk(event.data);
+            source.connect(workletNode);
+            workletNode.connect(audioCtx.destination);
+          } catch (workletError) {
+            console.warn('AudioWorklet Fallback zu ScriptProcessor:', workletError);
+            scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+            scriptNode.onaudioprocess = (e) => {
+              const input = e.inputBuffer.getChannelData(0);
+              const pcm16 = new Int16Array(input.length);
+              for (let i = 0; i < input.length; i++) {
+                let s = Math.max(-1, Math.min(1, input[i]));
+                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              sendAudioChunk(pcm16.buffer);
+            };
+            source.connect(scriptNode);
+            scriptNode.connect(audioCtx.destination);
+          }
+
           setStatus('connecting', 'Verbinde Gemini API...');
-          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          // Stabilere v1beta Route
+          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
           websocket = new WebSocket(wsUrl);
 
-          websocket.onopen = async () => {
-            // Live Handshake Protocol
+          websocket.onopen = () => {
             const setupPayload = {
               setup: {
                 model: 'models/gemini-2.0-flash-exp',
@@ -691,72 +697,34 @@
                 },
                 system_instruction: {
                   parts: [{
-                    text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil (Frequenz, Timbre, Dynamik) und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn aus dem Kontext reale Namen oder Rollen hervorgehen (z. B. 'Hallo Herr Meier', 'Als Projektleiter...'), übernimm diese Rollenbezeichnung präzise. 3. Wenn mehrere Stimmen gleichzeitig reden, Hintergrundlärm herrscht oder das Signal unverständlich ist, gib exakt den Marker '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Ausgabe zwingend als JSON-Objekt pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false} Gib niemals Begrüßungen, Markdown-Codeblöcke oder einleitende Texte aus, sondern nur rohes JSON."
+                    text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn reale Namen/Rollen genannt werden, nutze diese. 3. Bei Stimmengewirr/Lärm gib '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Ausgabe zwingend als JSON pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false}. Gib nur reines JSON aus, kein Markdown."
                   }]
                 }
               }
             };
             websocket.send(JSON.stringify(setupPayload));
-
-            // Initialisiere Audio Worklet Pipeline
-            try {
-              const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
-              const blobUrl = URL.createObjectURL(blob);
-              await audioCtx.audioWorklet.addModule(blobUrl);
-              workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
-
-              workletNode.port.onmessage = (event) => {
-                if (websocket && websocket.readyState === WebSocket.OPEN && !isAwaitingSummary) {
-                  const base64Data = arrayBufferToBase64(event.data);
-                  websocket.send(JSON.stringify({
-                    realtime_input: {
-                      media_chunks: [{
-                        mime_type: 'audio/pcm;rate=16000',
-                        data: base64Data
-                      }]
-                    }
-                  }));
-                }
-              };
-              source.connect(workletNode);
-              workletNode.connect(audioCtx.destination);
-            } catch (workletError) {
-              console.warn('AudioWorklet fehlgeschlagen, nutze ScriptProcessorNode Fallback:', workletError);
-              scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
-              scriptNode.onaudioprocess = (e) => {
-                if (websocket && websocket.readyState === WebSocket.OPEN && !isAwaitingSummary) {
-                  const input = e.inputBuffer.getChannelData(0);
-                  const pcm16 = new Int16Array(input.length);
-                  for (let i = 0; i < input.length; i++) {
-                    let s = Math.max(-1, Math.min(1, input[i]));
-                    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                  }
-                  const base64Data = arrayBufferToBase64(pcm16.buffer);
-                  websocket.send(JSON.stringify({
-                    realtime_input: {
-                      media_chunks: [{
-                        mime_type: 'audio/pcm;rate=16000',
-                        data: base64Data
-                      }]
-                    }
-                  }));
-                }
-              };
-              source.connect(scriptNode);
-              scriptNode.connect(audioCtx.destination);
-            }
-
-            recordingStartTime = Date.now();
-            isRecording = true;
-            await requestWakeLock();
-            setStatus('live', 'Live-Aufnahme');
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
           };
 
-          websocket.onmessage = (event) => {
+          websocket.onmessage = async (event) => {
+            let rawData = event.data;
+            if (rawData instanceof Blob) {
+              rawData = await rawData.text();
+            }
+
             try {
-              const resp = JSON.parse(event.data);
+              const resp = JSON.parse(rawData);
+
+              // Handshake Bestätigung abfangen
+              if (resp.setupComplete || resp.setup_complete) {
+                isHandshakeComplete = true;
+                recordingStartTime = Date.now();
+                isRecording = true;
+                await requestWakeLock();
+                setStatus('live', 'Live-Aufnahme');
+                stopBtn.disabled = false;
+                return;
+              }
+
               if (resp.serverContent?.modelTurn?.parts) {
                 for (const part of resp.serverContent.modelTurn.parts) {
                   if (part.text) {
@@ -765,45 +733,47 @@
                 }
               }
             } catch (err) {
-              console.error('Fehler beim Verarbeiten der Nachricht:', err);
+              console.error('JSON Decode Fehler:', err, rawData);
             }
           };
 
           websocket.onerror = (err) => {
             console.error('WebSocket Error:', err);
-            showError('Verbindungsfehler zur Gemini API. Bitte Key und Netzwerk prüfen.');
-            stopLiveSession();
           };
 
-          websocket.onclose = () => {
-            if (isRecording) {
-              stopLiveSession();
+          websocket.onclose = (e) => {
+            console.warn(`WebSocket geschlossen: Code=${e.code}, Reason=${e.reason}`);
+            if (isRecording || !isHandshakeComplete) {
+              if (e.code === 1008 || e.code === 1007) {
+                showError(`API-Fehler (${e.code}): Bitte prüfe den API-Key auf Gültigkeit.`);
+              } else if (!e.wasClean) {
+                showError(`Verbindung unterbrochen (Code ${e.code}).`);
+              }
+              stopLiveSession(false);
             }
           };
 
         } catch (err) {
           console.error(err);
-          let msg = 'Fehler beim Starten der Tonaufnahme.';
+          let msg = 'Mikrofonfehler: ' + (err.message || err.name);
           if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            msg += ' Mikrofon-Zugriff erfordert HTTPS.';
-          } else if (err.name === 'NotAllowedError') {
-            msg += ' Mikrofon-Berechtigung verweigert.';
+            msg += ' (HTTPS ist auf Mobilgeräten zwingend erforderlich!)';
           }
           showError(msg);
-          setStatus('', 'Bereit');
           cleanupResources();
+          setStatus('', 'Bereit');
         }
       }
 
-      async function stopLiveSession() {
-        if (!isRecording && !isAwaitingSummary) return;
+      async function stopLiveSession(requestSummary = true) {
+        const wasActive = isRecording;
         isRecording = false;
-        setStatus('processing', 'Verarbeite Zusammenfassung...');
+        isHandshakeComplete = false;
         stopBtn.disabled = true;
 
-        // 1. Audio Capture anhalten
         if (micStream) {
           micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
         }
         if (workletNode) { workletNode.disconnect(); workletNode = null; }
         if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
@@ -811,7 +781,6 @@
           audioCtx.close().catch(() => {});
         }
 
-        // 2. Parallele Tonspur sichern und UI Player bereitstellen
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           mediaRecorder.onstop = () => {
             const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
@@ -825,14 +794,14 @@
 
         releaseWakeLock();
 
-        // 3. Abschließende Besprechungs-Zusammenfassung anfordern
-        if (websocket && websocket.readyState === WebSocket.OPEN) {
+        if (wasActive && requestSummary && websocket && websocket.readyState === WebSocket.OPEN) {
+          setStatus('processing', 'Erstelle Zusammenfassung...');
           isAwaitingSummary = true;
           textChunkBuffer = '';
           summaryBox.classList.add('visible');
-          summaryContent.textContent = 'Zusammenfassung wird von Gemini formuliert...';
+          summaryContent.textContent = 'Zusammenfassung wird geladen...';
 
-          const summaryPayload = {
+          websocket.send(JSON.stringify({
             client_content: {
               turns: [{
                 role: 'user',
@@ -842,16 +811,15 @@
               }],
               turn_complete: true
             }
-          };
-          websocket.send(JSON.stringify(summaryPayload));
+          }));
 
-          // Nach Timeout Verbindung schließen
           setTimeout(() => {
             cleanupWebSocket();
             setStatus('', 'Beendet');
             startBtn.disabled = false;
           }, 12000);
         } else {
+          cleanupWebSocket();
           setStatus('', 'Beendet');
           startBtn.disabled = false;
         }
@@ -883,11 +851,8 @@
       }
 
       startBtn.addEventListener('click', startLiveSession);
-      stopBtn.addEventListener('click', stopLiveSession);
-
-      window.addEventListener('beforeunload', () => {
-        cleanupResources();
-      });
+      stopBtn.addEventListener('click', () => stopLiveSession(true));
+      window.addEventListener('beforeunload', cleanupResources);
     })();
   </script>
 </body>
