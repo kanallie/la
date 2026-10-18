@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>v0.4.2</title>
+  <title>Gemini Transcriber v0.4.3</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -49,7 +49,7 @@
       padding: 12px 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       flex-shrink: 0;
     }
 
@@ -145,15 +145,36 @@
       border-color: var(--accent-blue);
     }
 
-    .btn-key-save {
+    .btn-small {
       background-color: var(--border-color);
       color: #fff;
       border: none;
-      padding: 0 14px;
+      padding: 0 12px;
       border-radius: 8px;
       font-weight: 600;
       font-size: 0.8rem;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .model-selection-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .model-select {
+      flex: 1;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--accent-cyan);
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      outline: none;
     }
 
     .controls-panel {
@@ -214,6 +235,61 @@
       height: 36px;
       border-radius: 6px;
     }
+
+    /* Ausklappbare Konsole */
+    .debug-details {
+      background-color: #050811;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .debug-summary {
+      background-color: var(--bg-surface);
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+
+    .debug-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-console {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+
+    .debug-log-view {
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 0.72rem;
+      line-height: 1.4;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #94a3b8;
+    }
+
+    .log-entry { margin-bottom: 4px; }
+    .log-info { color: #38bdf8; }
+    .log-success { color: #4ade80; }
+    .log-warn { color: #facc15; }
+    .log-error { color: #f87171; }
 
     main {
       flex: 1;
@@ -351,7 +427,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Transcriber <span class="version-tag">v0.4.1</span></h1>
+        <h1>Gemini Transcriber <span class="version-tag">v0.4.3</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -361,7 +437,17 @@
 
     <div class="api-input-group">
       <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key..." autocomplete="off">
-      <button id="saveKeyBtn" class="btn-key-save">Speichern</button>
+      <button id="saveKeyBtn" class="btn-small">Speichern</button>
+      <button id="testModelsBtn" class="btn-small">Modelle prüfen</button>
+    </div>
+
+    <div class="model-selection-row">
+      <select id="modelSelect" class="model-select">
+        <option value="auto">Modell: Auto-Discovery (Empfohlen)</option>
+        <option value="models/gemini-2.0-flash">models/gemini-2.0-flash</option>
+        <option value="models/gemini-2.0-flash-exp">models/gemini-2.0-flash-exp</option>
+        <option value="models/gemini-2.5-flash">models/gemini-2.5-flash</option>
+      </select>
     </div>
 
     <div class="controls-panel">
@@ -382,6 +468,18 @@
 
   <main id="mainScroll">
     <div id="errorBanner" class="error-banner"></div>
+
+    <!-- Interaktive Debug-Konsole -->
+    <details id="debugDetails" class="debug-details" open>
+      <summary class="debug-summary">
+        <span>🛠️ Debug-Konsole & API-Logs</span>
+        <div class="debug-actions">
+          <button id="copyLogBtn" class="btn-console" type="button">Kopieren</button>
+          <button id="clearLogBtn" class="btn-console" type="button">Leeren</button>
+        </div>
+      </summary>
+      <div id="debugLogView" class="debug-log-view"></div>
+    </details>
 
     <section id="summaryBox" class="summary-card">
       <div class="summary-header">
@@ -451,6 +549,8 @@
 
       const apiKeyInput = document.getElementById('apiKeyInput');
       const saveKeyBtn = document.getElementById('saveKeyBtn');
+      const testModelsBtn = document.getElementById('testModelsBtn');
+      const modelSelect = document.getElementById('modelSelect');
       const startBtn = document.getElementById('startBtn');
       const stopBtn = document.getElementById('stopBtn');
       const statusBadge = document.getElementById('statusBadge');
@@ -462,14 +562,48 @@
       const audioPlayerContainer = document.getElementById('audioPlayerContainer');
       const audioPlayback = document.getElementById('audioPlayback');
       const mainScroll = document.getElementById('mainScroll');
+      const debugLogView = document.getElementById('debugLogView');
+      const copyLogBtn = document.getElementById('copyLogBtn');
+      const clearLogBtn = document.getElementById('clearLogBtn');
+
+      function log(message, type = 'info') {
+        const time = new Date().toISOString().split('T')[1].replace('Z', '');
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-${type}`;
+        entry.textContent = `[${time}] ${message}`;
+        debugLogView.appendChild(entry);
+        debugLogView.scrollTop = debugLogView.scrollHeight;
+      }
+
+      copyLogBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = Array.from(debugLogView.children).map(c => c.textContent).join('\n');
+        navigator.clipboard.writeText(text).then(() => {
+          showError('Logs in Zwischenablage kopiert.', false);
+        }).catch(() => {
+          showError('Kopieren fehlgeschlagen.');
+        });
+      });
+
+      clearLogBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        debugLogView.innerHTML = '';
+        log('Log-Konsole geleert.');
+      });
+
+      log('App initialisiert (v0.4.3).');
 
       const savedKey = localStorage.getItem('gemini_api_key');
-      if (savedKey) apiKeyInput.value = savedKey;
+      if (savedKey) {
+        apiKeyInput.value = savedKey;
+        log('Gespeicherter API-Key geladen.');
+      }
 
       saveKeyBtn.addEventListener('click', () => {
         const key = apiKeyInput.value.trim();
         if (key) {
           localStorage.setItem('gemini_api_key', key);
+          log('API-Key im localStorage gesichert.', 'success');
           showError('API-Key erfolgreich gespeichert.', false);
         }
       });
@@ -498,7 +632,10 @@
         if ('wakeLock' in navigator) {
           try {
             wakeLock = await navigator.wakeLock.request('screen');
-          } catch (err) {}
+            log('Wake Lock erfolgreich aktiviert.', 'info');
+          } catch (err) {
+            log('Wake Lock Fehler: ' + err.message, 'warn');
+          }
         }
       }
 
@@ -506,6 +643,7 @@
         if (wakeLock) {
           wakeLock.release().catch(() => {});
           wakeLock = null;
+          log('Wake Lock freigegeben.', 'info');
         }
       }
 
@@ -525,28 +663,69 @@
         return `${m}:${s}`;
       }
 
-      // Modellauflösung direkt gegen v1alpha
-      async function resolveLiveModel(apiKey) {
-        try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.models) {
-              const bidi = data.models.filter(m => 
-                Array.isArray(m.supportedGenerationMethods) && 
-                m.supportedGenerationMethods.includes('bidiGenerateContent')
-              );
-              const match = bidi.find(m => m.name.includes('gemini-2.0-flash-exp')) ||
-                            bidi.find(m => m.name.includes('gemini-2.0-flash')) ||
-                            bidi[0];
-              if (match) return match.name;
+      // Modell-Abfrage über v1beta und v1alpha
+      async function queryAvailableModels(apiKey) {
+        log('Starte Modell-Abfrage über REST...');
+        const endpoints = [
+          { ver: 'v1beta', url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}` },
+          { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` }
+        ];
+
+        let bidiModelsFound = [];
+
+        for (const ep of endpoints) {
+          try {
+            log(`Frage ${ep.ver} ab: ${ep.url.replace(apiKey, 'HIDDEN_KEY')}`);
+            const res = await fetch(ep.url);
+            log(`HTTP Status [${ep.ver}]: ${res.status} ${res.statusText}`);
+            if (res.ok) {
+              const data = await res.json();
+              const models = data.models || [];
+              log(`Erhalten: ${models.length} Modelle in [${ep.ver}].`);
+
+              for (const m of models) {
+                const methods = m.supportedGenerationMethods || [];
+                const supportsBidi = methods.includes('bidiGenerateContent');
+                if (supportsBidi) {
+                  log(`🎯 Treffer [${ep.ver}]: ${m.name} unterstützt bidiGenerateContent!`, 'success');
+                  bidiModelsFound.push({ name: m.name, version: ep.ver });
+                }
+              }
+            } else {
+              const errBody = await res.text();
+              log(`Fehler-Response [${ep.ver}]: ${errBody}`, 'error');
             }
+          } catch (e) {
+            log(`Netzwerkfehler bei [${ep.ver}]: ${e.message}`, 'error');
           }
-        } catch (e) {
-          console.warn('Fallback zu Standard-Modell:', e);
         }
-        return 'models/gemini-2.0-flash-exp';
+
+        if (bidiModelsFound.length > 0) {
+          // Update Dropdown
+          modelSelect.innerHTML = '';
+          bidiModelsFound.forEach((item, idx) => {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify(item);
+            opt.textContent = `${item.name} (${item.version})`;
+            if (idx === 0) opt.selected = true;
+            modelSelect.appendChild(opt);
+          });
+          log(`Dropdown mit ${bidiModelsFound.length} passenden Modellen befüllt.`, 'success');
+          return bidiModelsFound[0];
+        } else {
+          log('Keine Modelle mit "bidiGenerateContent" explizit deklariert. Verwende Fallback.', 'warn');
+          return { name: 'models/gemini-2.0-flash', version: 'v1beta' };
+        }
       }
+
+      testModelsBtn.addEventListener('click', async () => {
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+          showError('Bitte erst einen Key eintragen.');
+          return;
+        }
+        await queryAvailableModels(apiKey);
+      });
 
       function sendAudioChunk(arrayBuffer) {
         if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
@@ -657,13 +836,22 @@
         isAwaitingSummary = false;
         isHandshakeComplete = false;
 
-        setStatus('connecting', 'Ermittle Live-Modell...');
+        setStatus('connecting', 'Ermittle Modell...');
         startBtn.disabled = true;
 
         try {
-          const resolvedModel = await resolveLiveModel(apiKey);
+          let selectedModelConfig;
+          const selectVal = modelSelect.value;
+          
+          if (selectVal === 'auto' || !selectVal.startsWith('{')) {
+            selectedModelConfig = await queryAvailableModels(apiKey);
+          } else {
+            selectedModelConfig = JSON.parse(selectVal);
+          }
 
-          setStatus('connecting', 'Initialisiere Mikrofon...');
+          log(`Ziel: Modell=${selectedModelConfig.name}, API-Version=${selectedModelConfig.version}`, 'info');
+
+          setStatus('connecting', 'Initialisiere Audio...');
           micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               channelCount: 1,
@@ -673,6 +861,7 @@
               autoGainControl: true
             }
           });
+          log('Mikrofon-Stream erfolgreich geöffnet.', 'success');
 
           let mimeType = 'audio/webm;codecs=opus';
           if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
@@ -697,7 +886,9 @@
             workletNode.port.onmessage = (event) => sendAudioChunk(event.data);
             source.connect(workletNode);
             workletNode.connect(audioCtx.destination);
+            log('AudioWorkletNode aktiv.', 'info');
           } catch (workletError) {
+            log('AudioWorklet fehlgeschlagen, wechsle auf ScriptProcessor: ' + workletError.message, 'warn');
             scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
             scriptNode.onaudioprocess = (e) => {
               const input = e.inputBuffer.getChannelData(0);
@@ -712,16 +903,17 @@
             scriptNode.connect(audioCtx.destination);
           }
 
-          setStatus('connecting', `Verbinde v1alpha (${resolvedModel.replace('models/', '')})...`);
-          
-          // Endpoint zwingend v1alpha für gemini-2.0-flash-exp
-          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          // Konstruiere WebSocket-URL passend zur aufgelösten Version
+          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${selectedModelConfig.version}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+          log(`Öffne WebSocket: ${wsUrl.replace(apiKey, 'HIDDEN_KEY')}`, 'info');
+
           websocket = new WebSocket(wsUrl);
 
           websocket.onopen = () => {
+            log('WebSocket verbunden. Sende Setup-Frame...', 'success');
             const setupPayload = {
               setup: {
-                model: resolvedModel,
+                model: selectedModelConfig.name,
                 generationConfig: {
                   responseModalities: ['TEXT'],
                   temperature: 0.1
@@ -734,6 +926,7 @@
               }
             };
             websocket.send(JSON.stringify(setupPayload));
+            log('Setup-Payload übermittelt: ' + JSON.stringify(setupPayload));
           };
 
           websocket.onmessage = async (event) => {
@@ -746,6 +939,7 @@
               const resp = JSON.parse(rawData);
 
               if (resp.setupComplete || resp.setup_complete) {
+                log('Handshake SetupComplete empfangen!', 'success');
                 isHandshakeComplete = true;
                 recordingStartTime = Date.now();
                 isRecording = true;
@@ -763,22 +957,20 @@
                 }
               }
             } catch (err) {
-              console.error('JSON Decode Fehler:', err, rawData);
+              log('JSON Decode Fehler: ' + err.message, 'warn');
             }
           };
 
           websocket.onerror = (err) => {
-            console.error('WebSocket Error:', err);
+            log('WebSocket onerror ausgelöst: ' + JSON.stringify(err), 'error');
           };
 
           websocket.onclose = (e) => {
-            console.warn(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
+            log(`WebSocket onclose: Code=${e.code}, Clean=${e.wasClean}, Grund="${e.reason}"`, e.code === 1000 ? 'info' : 'error');
             if (isRecording || !isHandshakeComplete) {
               let reasonMsg = e.reason ? ` (${e.reason})` : '';
               if (e.code === 1008) {
-                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell oder Setup nicht zugelassen.'}`);
-              } else if (e.code === 1007) {
-                showError(`Format-Fehler (1007): Payload nicht konform.${reasonMsg}`);
+                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Setup abgelehnt.'}`);
               } else if (!e.wasClean) {
                 showError(`Verbindung getrennt (Code ${e.code}).${reasonMsg}`);
               }
@@ -787,8 +979,8 @@
           };
 
         } catch (err) {
-          console.error(err);
-          let msg = 'Mikrofonfehler: ' + (err.message || err.name);
+          log('Schwerer Ausnahmefehler beim Start: ' + err.message, 'error');
+          let msg = 'Fehler: ' + (err.message || err.name);
           if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
             msg += ' (HTTPS ist auf Mobilgeräten zwingend erforderlich!)';
           }
@@ -803,6 +995,8 @@
         isRecording = false;
         isHandshakeComplete = false;
         stopBtn.disabled = true;
+
+        log('Stoppe Live-Sitzung...', 'info');
 
         if (micStream) {
           micStream.getTracks().forEach(t => t.stop());
@@ -821,6 +1015,7 @@
             recordedBlobUrl = URL.createObjectURL(blob);
             audioPlayback.src = recordedBlobUrl;
             audioPlayerContainer.classList.add('visible');
+            log('Audio-Aufnahme im HTML5-Player bereitgestellt.', 'success');
           };
           mediaRecorder.stop();
         }
@@ -834,6 +1029,7 @@
           summaryBox.classList.add('visible');
           summaryContent.textContent = 'Zusammenfassung wird geladen...';
 
+          log('Sende Prompt für Besprechungs-Zusammenfassung...');
           websocket.send(JSON.stringify({
             clientContent: {
               turns: [{
@@ -866,6 +1062,7 @@
           websocket.onclose = null;
           websocket.close();
           websocket = null;
+          log('WebSocket Verbindung aufgeräumt.');
         }
       }
 
