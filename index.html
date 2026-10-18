@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Transcriber v0.4.6</title>
+  <title>Gemini Live Transkriptor & Meeting-Tracker v0.5.0</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -91,12 +91,6 @@
       transition: all 0.2s ease;
     }
 
-    .badge-status.connecting {
-      background-color: rgba(245, 158, 11, 0.15);
-      color: var(--accent-amber);
-      border-color: rgba(245, 158, 11, 0.3);
-    }
-
     .badge-status.live {
       background-color: rgba(239, 68, 68, 0.15);
       color: var(--accent-red);
@@ -157,33 +151,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      white-space: nowrap;
-    }
-
-    .model-selection-box {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .model-label {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      display: flex;
-      justify-content: space-between;
-    }
-
-    .model-select {
-      width: 100%;
-      background-color: var(--bg-card);
-      border: 1px solid var(--border-color);
-      color: var(--accent-cyan);
-      font-weight: 600;
-      padding: 7px 10px;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      outline: none;
     }
 
     .controls-panel {
@@ -234,80 +201,95 @@
       padding: 8px 14px;
       border-bottom: 1px solid var(--border-color);
       display: none;
+      flex-direction: column;
+      gap: 6px;
     }
 
     .audio-player-container.visible {
-      display: block;
+      display: flex;
+    }
+
+    .player-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
     audio {
-      width: 100%;
+      flex: 1;
       height: 36px;
       border-radius: 6px;
     }
 
-    .debug-details {
-      background-color: #050811;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      margin-bottom: 10px;
-      overflow: hidden;
-    }
-
-    .debug-summary {
-      background-color: var(--bg-surface);
-      padding: 6px 12px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--accent-cyan);
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      user-select: none;
-    }
-
-    .debug-actions {
-      display: flex;
-      gap: 6px;
-    }
-
-    .btn-console {
-      background-color: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      cursor: pointer;
-    }
-
-    .debug-log-view {
-      padding: 8px 12px;
-      font-family: monospace;
-      font-size: 0.72rem;
-      line-height: 1.4;
-      max-height: 200px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
-      color: #94a3b8;
-    }
-
-    .log-entry { margin-bottom: 3px; }
-    .log-info { color: #38bdf8; }
-    .log-success { color: #4ade80; }
-    .log-warn { color: #facc15; }
-    .log-error { color: #f87171; }
-
     main {
       flex: 1;
       overflow-y: auto;
-      padding: 14px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
       gap: 10px;
       scroll-behavior: smooth;
+    }
+
+    /* Live-Themen-Status-Monitor */
+    .threads-card {
+      background: linear-gradient(180deg, #162036, #0e1626);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .threads-header {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .threads-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .thread-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .thread-status-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .status-open {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .status-closed {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .thread-text {
+      flex: 1;
+      color: #e2e8f0;
     }
 
     .summary-card {
@@ -329,9 +311,6 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin-bottom: 6px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
     }
 
     .summary-content {
@@ -350,16 +329,11 @@
     .transcript-item {
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 8px 10px;
       display: flex;
       flex-direction: column;
       gap: 4px;
-    }
-
-    .transcript-item.overlap {
-      border-color: var(--accent-amber);
-      background-color: rgba(245, 158, 11, 0.06);
     }
 
     .transcript-meta {
@@ -398,16 +372,6 @@
       background: var(--accent-blue);
     }
 
-    .overlap-badge {
-      font-size: 0.68rem;
-      font-weight: 600;
-      color: var(--accent-amber);
-      background: rgba(245, 158, 11, 0.15);
-      padding: 2px 5px;
-      border-radius: 4px;
-      margin-left: auto;
-    }
-
     .transcript-text {
       font-size: 0.88rem;
       color: var(--text-main);
@@ -436,7 +400,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Transcriber <span class="version-tag">v0.4.6</span></h1>
+        <h1>Gemini Tracker <span class="version-tag">v0.5.0</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -447,26 +411,6 @@
     <div class="api-input-group">
       <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key..." autocomplete="off">
       <button id="saveKeyBtn" class="btn-small">Speichern</button>
-      <button id="loadModelsBtn" class="btn-small">Modelle laden</button>
-    </div>
-
-    <div class="model-selection-box">
-      <div class="model-label">
-        <span>Aktives Modell für Live WebSocket:</span>
-        <span id="modelCountLabel"></span>
-      </div>
-      <select id="modelSelect" class="model-select">
-        <!-- Native Audio mit korrekter AUDIO-Modalität vorausgewählt -->
-        <option value='{"name":"models/gemini-2.5-flash-native-audio-latest","version":"v1beta","modality":"AUDIO"}'>
-          ⭐ [Empfohlen] gemini-2.5-flash-native-audio-latest (v1beta | Audio+Transkript)
-        </option>
-        <option value='{"name":"models/gemini-2.0-flash-realtime-exp","version":"v1alpha","modality":"AUDIO"}'>
-          gemini-2.0-flash-realtime-exp (v1alpha | Audio+Transkript)
-        </option>
-        <option value='{"name":"models/gemini-2.0-flash-exp","version":"v1alpha","modality":"TEXT"}'>
-          gemini-2.0-flash-exp (v1alpha | Text)
-        </option>
-      </select>
     </div>
 
     <div class="controls-panel">
@@ -476,37 +420,41 @@
       </button>
       <button id="stopBtn" class="btn-action btn-stop" disabled>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
-        Stoppen
+        Beenden
       </button>
     </div>
   </header>
 
   <div id="audioPlayerContainer" class="audio-player-container">
-    <audio id="audioPlayback" controls preload="metadata"></audio>
+    <div class="player-row">
+      <audio id="audioPlayback" controls preload="metadata"></audio>
+      <button id="downloadTranscriptBtn" class="btn-small">Transkript (.txt)</button>
+    </div>
   </div>
 
   <main id="mainScroll">
     <div id="errorBanner" class="error-banner"></div>
 
-    <details id="debugDetails" class="debug-details" open>
-      <summary class="debug-summary">
-        <span>🛠️ Debug-Konsole</span>
-        <div class="debug-actions">
-          <button id="copyLogBtn" class="btn-console" type="button">Kopieren</button>
-          <button id="clearLogBtn" class="btn-console" type="button">Leeren</button>
-        </div>
-      </summary>
-      <div id="debugLogView" class="debug-log-view"></div>
-    </details>
-
-    <section id="summaryBox" class="summary-card">
-      <div class="summary-header">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Besprechungs-Zusammenfassung
+    <!-- Live Status der Themen & Gesprächsstränge -->
+    <section class="threads-card">
+      <div class="threads-header">
+        <span>Gesprächsstränge & Status (Live)</span>
+        <span id="threadCountBadge" style="font-size: 0.7rem; color: var(--text-muted);">Warte auf Sprache...</span>
       </div>
-      <div id="summaryContent" class="summary-content">Erstelle Zusammenfassung...</div>
+      <div id="threadsList" class="threads-list">
+        <div style="font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+          Starten Sie das Gespräch. Die KI erkennt behandelte Themen und zeigt an, welche noch offen oder bereits entschieden sind.
+        </div>
+      </div>
     </section>
 
+    <!-- Finale Zusammenfassung -->
+    <section id="summaryBox" class="summary-card">
+      <div class="summary-header">Zusammenfassung & Beschlüsse</div>
+      <div id="summaryContent" class="summary-content">Wird generiert...</div>
+    </section>
+
+    <!-- Detailiertes Live-Transkript -->
     <section id="transcriptContainer" class="transcript-stream"></section>
   </main>
 
@@ -514,62 +462,23 @@
     (() => {
       'use strict';
 
-      const WORKLET_CODE = `
-        class PcmProcessor extends AudioWorkletProcessor {
-          constructor() {
-            super();
-            this.bufferSize = 4096;
-            this.buffer = new Float32Array(this.bufferSize);
-            this.bytesWritten = 0;
-          }
-
-          process(inputs) {
-            const input = inputs[0];
-            if (!input || !input[0]) return true;
-            const channel = input[0];
-
-            for (let i = 0; i < channel.length; i++) {
-              this.buffer[this.bytesWritten++] = channel[i];
-              if (this.bytesWritten >= this.bufferSize) {
-                this.flush();
-              }
-            }
-            return true;
-          }
-
-          flush() {
-            const pcm16 = new Int16Array(this.bytesWritten);
-            for (let i = 0; i < this.bytesWritten; i++) {
-              let s = Math.max(-1, Math.min(1, this.buffer[i]));
-              pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-            }
-            this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
-            this.bytesWritten = 0;
-          }
-        }
-        registerProcessor('pcm-processor', PcmProcessor);
-      `;
-
-      let audioCtx = null;
+      const CHUNK_INTERVAL_MS = 8000; // Alle 8 Sekunden wird ein Schnipsel analysiert
       let micStream = null;
-      let mediaRecorder = null;
-      let recordedChunks = [];
-      let recordedBlobUrl = null;
-      let workletNode = null;
-      let scriptNode = null;
-      let websocket = null;
-      let wakeLock = null;
-      let recordingStartTime = 0;
+      let totalMediaRecorder = null;
+      let totalAudioChunks = [];
+      let totalAudioBlobUrl = null;
       let isRecording = false;
-      let isAwaitingSummary = false;
-      let isHandshakeComplete = false;
-      let textChunkBuffer = '';
+      let recordingStartTime = 0;
+      let chunkCounter = 0;
+      let intervalTimer = null;
+      let wakeLock = null;
+
+      // Zustand der Besprechung
+      const transcriptEntries = [];
+      let currentTopics = []; // [{ topic: "", status: "OFFEN"|"BESCHLOSSEN", details: "" }]
 
       const apiKeyInput = document.getElementById('apiKeyInput');
       const saveKeyBtn = document.getElementById('saveKeyBtn');
-      const loadModelsBtn = document.getElementById('loadModelsBtn');
-      const modelSelect = document.getElementById('modelSelect');
-      const modelCountLabel = document.getElementById('modelCountLabel');
       const startBtn = document.getElementById('startBtn');
       const stopBtn = document.getElementById('stopBtn');
       const statusBadge = document.getElementById('statusBadge');
@@ -580,253 +489,114 @@
       const errorBanner = document.getElementById('errorBanner');
       const audioPlayerContainer = document.getElementById('audioPlayerContainer');
       const audioPlayback = document.getElementById('audioPlayback');
+      const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
+      const threadsList = document.getElementById('threadsList');
+      const threadCountBadge = document.getElementById('threadCountBadge');
       const mainScroll = document.getElementById('mainScroll');
-      const debugLogView = document.getElementById('debugLogView');
-      const copyLogBtn = document.getElementById('copyLogBtn');
-      const clearLogBtn = document.getElementById('clearLogBtn');
-
-      function log(message, type = 'info') {
-        const time = new Date().toISOString().split('T')[1].replace('Z', '');
-        const entry = document.createElement('div');
-        entry.className = `log-entry log-${type}`;
-        entry.textContent = `[${time}] ${message}`;
-        debugLogView.appendChild(entry);
-        debugLogView.scrollTop = debugLogView.scrollHeight;
-      }
-
-      copyLogBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = Array.from(debugLogView.children).map(c => c.textContent).join('\n');
-        navigator.clipboard.writeText(text).then(() => {
-          showError('Logs kopiert.', false);
-        }).catch(() => {
-          showError('Kopieren fehlgeschlagen.');
-        });
-      });
-
-      clearLogBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        debugLogView.innerHTML = '';
-        log('Log-Konsole geleert.');
-      });
-
-      log('App initialisiert (v0.4.6).');
 
       const savedKey = localStorage.getItem('gemini_api_key');
-      if (savedKey) {
-        apiKeyInput.value = savedKey;
-        log('Gespeicherter API-Key geladen.');
-      }
+      if (savedKey) apiKeyInput.value = savedKey;
 
       saveKeyBtn.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key) {
-          localStorage.setItem('gemini_api_key', key);
-          log('API-Key gesichert.', 'success');
-          showError('API-Key erfolgreich gespeichert.', false);
+        const k = apiKeyInput.value.trim();
+        if (k) {
+          localStorage.setItem('gemini_api_key', k);
+          showError('API-Key gespeichert.', false);
         }
       });
 
-      function setStatus(status, text) {
-        statusBadge.className = 'badge-status ' + status;
-        statusText.textContent = text;
+      function setStatus(st, txt) {
+        statusBadge.className = 'badge-status ' + st;
+        statusText.textContent = txt;
       }
 
-      function showError(msg, isError = true) {
+      function showError(msg, isErr = true) {
         errorBanner.textContent = msg;
-        errorBanner.style.backgroundColor = isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
-        errorBanner.style.borderColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
-        errorBanner.style.color = isError ? '#fca5a5' : '#6ee7b7';
+        errorBanner.style.backgroundColor = isErr ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+        errorBanner.style.borderColor = isErr ? 'var(--accent-red)' : 'var(--accent-green)';
+        errorBanner.style.color = isErr ? '#fca5a5' : '#6ee7b7';
         errorBanner.classList.add('visible');
-        if (!isError) {
-          setTimeout(() => errorBanner.classList.remove('visible'), 3000);
-        }
+        if (!isErr) setTimeout(() => errorBanner.classList.remove('visible'), 3000);
       }
 
-      function clearError() {
-        errorBanner.classList.remove('visible');
+      function formatTime(sec) {
+        const m = Math.floor(sec / 60).toString().padStart(2, '0');
+        const s = Math.floor(sec % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
       }
 
       async function requestWakeLock() {
         if ('wakeLock' in navigator) {
-          try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            log('Wake Lock aktiv.', 'info');
-          } catch (err) {
-            log('Wake Lock Warnung: ' + err.message, 'warn');
-          }
+          try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
         }
       }
 
       function releaseWakeLock() {
-        if (wakeLock) {
-          wakeLock.release().catch(() => {});
-          wakeLock = null;
-        }
+        if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
       }
 
-      function arrayBufferToBase64(buffer) {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return window.btoa(binary);
+      function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
       }
 
-      function formatTime(seconds) {
-        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
-      }
+      // Aktualisiert die Anzeige der Gesprächsstränge in der UI
+      function renderTopics(topics) {
+        if (!topics || topics.length === 0) return;
+        currentTopics = topics;
+        threadsList.innerHTML = '';
+        
+        let openCount = 0;
+        topics.forEach(t => {
+          const isClosed = (t.status || '').toUpperCase() === 'BESCHLOSSEN' || (t.status || '').toUpperCase() === 'ABGESCHLOSSEN';
+          if (!isClosed) openCount++;
 
-      async function populateModelsFromAPI(apiKey) {
-        log('Lade alle Modell-Listen von der Google API...', 'info');
-        const endpoints = [
-          { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` },
-          { ver: 'v1beta', url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}` }
-        ];
+          const item = document.createElement('div');
+          item.className = 'thread-item';
 
-        const allModels = [];
-        const seen = new Set();
+          const badge = document.createElement('span');
+          badge.className = `thread-status-badge ${isClosed ? 'status-closed' : 'status-open'}`;
+          badge.textContent = isClosed ? '✓ Beschlossen' : '⏳ Noch offen';
 
-        for (const ep of endpoints) {
-          try {
-            const res = await fetch(ep.url);
-            if (res.ok) {
-              const data = await res.json();
-              const list = data.models || [];
-              for (const m of list) {
-                const key = `${m.name}|${ep.ver}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  const isAudio = m.name.includes('audio') || m.name.includes('live');
-                  allModels.push({
-                    name: m.name,
-                    version: ep.ver,
-                    modality: isAudio ? 'AUDIO' : 'TEXT'
-                  });
-                }
-              }
-            }
-          } catch (e) {
-            log(`Fehler [${ep.ver}]: ${e.message}`, 'error');
-          }
-        }
+          const desc = document.createElement('div');
+          desc.className = 'thread-text';
+          desc.innerHTML = `<strong>${escapeHtml(t.topic)}</strong>${t.details ? ': ' + escapeHtml(t.details) : ''}`;
 
-        if (allModels.length === 0) {
-          showError('Keine Modelle geladen.');
-          return;
-        }
-
-        modelSelect.innerHTML = '';
-
-        const primaryOptions = [
-          { name: 'models/gemini-2.5-flash-native-audio-latest', version: 'v1beta', modality: 'AUDIO', label: '⭐ [Native Audio] gemini-2.5-flash-native-audio-latest (v1beta)' },
-          { name: 'models/gemini-2.0-flash-realtime-exp', version: 'v1alpha', modality: 'AUDIO', label: '⭐ [Realtime] gemini-2.0-flash-realtime-exp (v1alpha)' },
-          { name: 'models/gemini-2.0-flash-exp', version: 'v1alpha', modality: 'TEXT', label: 'gemini-2.0-flash-exp (v1alpha | Text)' }
-        ];
-
-        primaryOptions.forEach(opt => {
-          const el = document.createElement('option');
-          el.value = JSON.stringify(opt);
-          el.textContent = opt.label;
-          modelSelect.appendChild(el);
+          item.appendChild(badge);
+          item.appendChild(desc);
+          threadsList.appendChild(item);
         });
 
-        const grp = document.createElement('optgroup');
-        grp.label = `API-Modelle (${allModels.length})`;
-        allModels.forEach(m => {
-          const el = document.createElement('option');
-          el.value = JSON.stringify(m);
-          el.textContent = `${m.name} (${m.version} | ${m.modality})`;
-          grp.appendChild(el);
-        });
-        modelSelect.appendChild(grp);
-
-        modelCountLabel.textContent = `(${allModels.length} geladen)`;
-        log(`Dropdown aktualisiert (${allModels.length} Modelle).`, 'success');
-        showError(`${allModels.length} API-Modelle geladen.`, false);
+        threadCountBadge.textContent = `${openCount} Thema/Themen offen`;
       }
 
-      loadModelsBtn.addEventListener('click', async () => {
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
-          showError('Bitte erst einen Key eintragen.');
-          return;
-        }
-        await populateModelsFromAPI(apiKey);
-      });
-
-      function sendAudioChunk(arrayBuffer) {
-        if (!websocket || websocket.readyState !== WebSocket.OPEN) return;
-        if (!isHandshakeComplete || isAwaitingSummary) return;
-
-        const base64Data = arrayBufferToBase64(arrayBuffer);
-        websocket.send(JSON.stringify({
-          realtimeInput: {
-            mediaChunks: [{
-              mimeType: 'audio/pcm;rate=16000',
-              data: base64Data
-            }]
-          }
-        }));
-      }
-
-      function processStreamedText(text) {
-        textChunkBuffer += text;
-
-        if (isAwaitingSummary) {
-          summaryContent.textContent = textChunkBuffer;
-          mainScroll.scrollTop = 0;
-          return;
-        }
-
-        let lines = textChunkBuffer.split('\n');
-        textChunkBuffer = lines.pop();
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          
-          let parsed = null;
-          try {
-            parsed = JSON.parse(trimmed);
-          } catch (e) {
-            const jsonMatch = trimmed.match(/\{.*?\}/);
-            if (jsonMatch) {
-              try { parsed = JSON.parse(jsonMatch[0]); } catch (err) {}
-            }
-          }
-
-          if (parsed && (parsed.speaker || parsed.text)) {
-            renderTranscriptItem(parsed);
-          }
-        }
-      }
-
-      function renderTranscriptItem(data) {
-        const timeOffsetSec = Math.max(0, (Date.now() - recordingStartTime) / 1000);
-        const timeFormatted = formatTime(timeOffsetSec);
+      function appendTranscriptItem(speaker, text, timeSec) {
+        transcriptEntries.push({ speaker, text, timeSec });
 
         const item = document.createElement('div');
-        item.className = 'transcript-item' + (data.is_overlap ? ' overlap' : '');
+        item.className = 'transcript-item';
 
         const meta = document.createElement('div');
         meta.className = 'transcript-meta';
 
         const spk = document.createElement('span');
         spk.className = 'speaker-tag';
-        spk.setAttribute('data-speaker', data.speaker || 'Unbekannt');
-        spk.textContent = data.speaker || 'Unbekannt';
+        spk.setAttribute('data-speaker', speaker);
+        spk.textContent = speaker;
 
         const timeBtn = document.createElement('button');
         timeBtn.className = 'timestamp-btn';
-        timeBtn.innerHTML = `⏱️ ${timeFormatted}`;
+        timeBtn.textContent = `⏱️ ${formatTime(timeSec)}`;
         timeBtn.onclick = () => {
           if (audioPlayback.src) {
-            audioPlayback.currentTime = timeOffsetSec;
+            audioPlayback.currentTime = timeSec;
             audioPlayback.play();
           }
         };
@@ -834,16 +604,9 @@
         meta.appendChild(spk);
         meta.appendChild(timeBtn);
 
-        if (data.is_overlap) {
-          const overlap = document.createElement('span');
-          overlap.className = 'overlap-badge';
-          overlap.textContent = 'Überlappung';
-          meta.appendChild(overlap);
-        }
-
         const content = document.createElement('div');
         content.className = 'transcript-text';
-        content.textContent = data.text || '';
+        content.textContent = text;
 
         item.appendChild(meta);
         item.appendChild(content);
@@ -852,284 +615,70 @@
         mainScroll.scrollTop = mainScroll.scrollHeight;
       }
 
-      async function startLiveSession() {
-        clearError();
+      function escapeHtml(str) {
+        return (str || '').replace(/[&<>'"]/g, 
+          tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+      }
+
+      // Verarbeitet ein Audio-Snippet mit Gemini 2.5 Flash
+      async function analyzeAudioChunk(audioBlob, chunkStartSec) {
         const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
-          showError('Bitte erst den Google AI Studio API-Key hinterlegen.');
-          return;
-        }
-
-        transcriptContainer.innerHTML = '';
-        summaryBox.classList.remove('visible');
-        audioPlayerContainer.classList.remove('visible');
-        textChunkBuffer = '';
-        recordedChunks = [];
-        isAwaitingSummary = false;
-        isHandshakeComplete = false;
-
-        startBtn.disabled = true;
+        if (!apiKey) return;
 
         try {
-          const selectedModelConfig = JSON.parse(modelSelect.value);
-          log(`Starte mit: ${selectedModelConfig.name} [${selectedModelConfig.version} | Modus: ${selectedModelConfig.modality}]`, 'info');
+          const base64Audio = await blobToBase64(audioBlob);
 
-          setStatus('connecting', 'Initialisiere Audio...');
-          micStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              channelCount: 1,
-              sampleRate: 16000,
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          });
-          log('Mikrofon geöffnet.', 'success');
+          // Bisherige Themen an den Prompt übergeben, damit die KI den roten Faden behält
+          const knownTopicsSummary = currentTopics.map(t => `- ${t.topic} (${t.status})`).join('\n');
 
-          let mimeType = 'audio/webm;codecs=opus';
-          if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
-          mediaRecorder = mimeType ? new MediaRecorder(micStream, { mimeType }) : new MediaRecorder(micStream);
-          mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) recordedChunks.push(e.data);
-          };
-          mediaRecorder.start(1000);
+          const promptText = `
+Du bist ein deutscher Besprechungsanalyst. 
+Aufgabe:
+1. Transkribiere das Audiosignal auf Deutsch. Ordne die Aussagen präzise Sprechern zu (z.B. "Sprecher A", "Sprecher B" oder Namen falls genannt).
+2. Analysiere die Gesprächsstränge/Themen: Welche Themen werden besprochen? Sind sie "OFFEN" (Diskussion läuft noch, keine Einigung erzielt) oder "BESCHLOSSEN" (Entscheidung/Konsens getroffen)?
+Bisherige bekannte Themen:
+${knownTopicsSummary || 'Noch keine'}
 
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-          if (audioCtx.state === 'suspended') {
-            await audioCtx.resume();
-          }
+Antworte AUSSCHLIESSLICH im folgenden gültigen JSON-Format (ohne Markdown, ohne Erklärungen):
+{
+  "dialog": [
+    {"speaker": "Sprecher A", "text": "Aussage auf Deutsch..."},
+    {"speaker": "Sprecher B", "text": "Antwort auf Deutsch..."}
+  ],
+  "topics": [
+    {"topic": "Themenname", "status": "OFFEN" oder "BESCHLOSSEN", "details": "Kurzer Stand oder Beschluss"}
+  ]
+}
+Wenn keine verständliche Sprache enthalten ist, gib leere Listen zurück.`;
 
-          const source = audioCtx.createMediaStreamSource(micStream);
-
-          try {
-            const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
-            const blobUrl = URL.createObjectURL(blob);
-            await audioCtx.audioWorklet.addModule(blobUrl);
-            workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
-            workletNode.port.onmessage = (event) => sendAudioChunk(event.data);
-            source.connect(workletNode);
-            workletNode.connect(audioCtx.destination);
-            log('AudioWorkletNode aktiv.', 'info');
-          } catch (workletError) {
-            log('ScriptProcessor Fallback: ' + workletError.message, 'warn');
-            scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
-            scriptNode.onaudioprocess = (e) => {
-              const input = e.inputBuffer.getChannelData(0);
-              const pcm16 = new Int16Array(input.length);
-              for (let i = 0; i < input.length; i++) {
-                let s = Math.max(-1, Math.min(1, input[i]));
-                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-              }
-              sendAudioChunk(pcm16.buffer);
-            };
-            source.connect(scriptNode);
-            scriptNode.connect(audioCtx.destination);
-          }
-
-          const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${selectedModelConfig.version}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-          log(`Verbinde WebSocket (${selectedModelConfig.version})...`, 'info');
-
-          websocket = new WebSocket(wsUrl);
-
-          websocket.onopen = () => {
-            log('WebSocket verbunden. Konstruiere Setup-Payload...', 'success');
-
-            const isAudioModality = selectedModelConfig.modality === 'AUDIO';
-
-            // GenerationConfig mit korrekter Modality-Definition
-            const genConfig = {
-              temperature: 0.1,
-              responseModalities: isAudioModality ? ['AUDIO'] : ['TEXT']
-            };
-
-            // Für Native Audio: Stimm-Konfiguration & Live-Transkription aktivieren
-            if (isAudioModality) {
-              genConfig.speechConfig = {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: 'Puck'
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: promptText },
+                  {
+                    inline_data: {
+                      mime_type: audioBlob.type || 'audio/webm',
+                      data: base64Audio
+                    }
                   }
-                }
-              };
-            }
-
-            const setupPayload = {
-              setup: {
-                model: selectedModelConfig.name,
-                generationConfig: genConfig,
-                systemInstruction: {
-                  parts: [{
-                    text: "Du bist ein akribischer Protokollant. Das Audiosignal stammt von einem Lautsprecher, über den mehrere Personen sprechen. Aufgaben: 1. Analysiere das Stimmprofil und unterscheide die Sprecher konsistent als [Sprecher A], [Sprecher B] etc. 2. Wenn reale Namen/Rollen genannt werden, nutze diese. 3. Bei Stimmengewirr/Lärm gib '[Stimmengewirr / Unverständlich]' aus. 4. Formatiere jede Textausgabe zwingend als JSON pro Zeile: {\"speaker\": \"Sprecher A\", \"text\": \"Gesagter Inhalt...\", \"is_overlap\": false}. Gib nur reines JSON aus, kein Markdown."
-                  }]
-                }
-              }
-            };
-
-            websocket.send(JSON.stringify(setupPayload));
-            log('Setup-Payload gesendet: ' + JSON.stringify(setupPayload));
-          };
-
-          websocket.onmessage = async (event) => {
-            let rawData = event.data;
-            if (rawData instanceof Blob) {
-              rawData = await rawData.text();
-            }
-
-            try {
-              const resp = JSON.parse(rawData);
-
-              if (resp.setupComplete || resp.setup_complete) {
-                log('🎉 Handshake SetupComplete von Google empfangen!', 'success');
-                isHandshakeComplete = true;
-                recordingStartTime = Date.now();
-                isRecording = true;
-                await requestWakeLock();
-                setStatus('live', 'Live-Aufnahme');
-                stopBtn.disabled = false;
-                return;
-              }
-
-              // Text aus modelTurn extrahieren (sowohl reiner Text als auch Transkripte)
-              if (resp.serverContent?.modelTurn?.parts) {
-                for (const part of resp.serverContent.modelTurn.parts) {
-                  if (part.text) {
-                    processStreamedText(part.text);
-                  }
-                }
-              }
-
-              // Transkripte aus nativer Audio-Transkription abgreifen
-              if (resp.serverContent?.outputAudioTranscription?.text) {
-                processStreamedText(resp.serverContent.outputAudioTranscription.text);
-              }
-            } catch (err) {
-              log('JSON Decode Fehler: ' + err.message, 'warn');
-            }
-          };
-
-          websocket.onerror = (err) => {
-            log('WebSocket Fehler!', 'error');
-          };
-
-          websocket.onclose = (e) => {
-            log(`WebSocket onclose: Code=${e.code}, Reason="${e.reason}"`, e.code === 1000 ? 'info' : 'error');
-            if (isRecording || !isHandshakeComplete) {
-              let reasonMsg = e.reason ? ` (${e.reason})` : '';
-              if (e.code === 1007) {
-                showError(`Modality-Fehler (1007): ${reasonMsg}`);
-              } else if (e.code === 1008) {
-                showError(`Policy-Fehler (1008): ${reasonMsg}`);
-              } else if (!e.wasClean) {
-                showError(`Verbindung getrennt (Code ${e.code}).${reasonMsg}`);
-              }
-              stopLiveSession(false);
-            }
-          };
-
-        } catch (err) {
-          log('Fehler beim Start: ' + err.message, 'error');
-          let msg = 'Fehler: ' + (err.message || err.name);
-          if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            msg += ' (HTTPS ist auf Mobilgeräten zwingend erforderlich!)';
-          }
-          showError(msg);
-          cleanupResources();
-          setStatus('', 'Bereit');
-        }
-      }
-
-      async function stopLiveSession(requestSummary = true) {
-        const wasActive = isRecording;
-        isRecording = false;
-        isHandshakeComplete = false;
-        stopBtn.disabled = true;
-
-        log('Stoppe Aufnahme...', 'info');
-
-        if (micStream) {
-          micStream.getTracks().forEach(t => t.stop());
-          micStream = null;
-        }
-        if (workletNode) { workletNode.disconnect(); workletNode = null; }
-        if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
-        if (audioCtx && audioCtx.state !== 'closed') {
-          audioCtx.close().catch(() => {});
-        }
-
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-          mediaRecorder.onstop = () => {
-            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-            if (recordedBlobUrl) URL.revokeObjectURL(recordedBlobUrl);
-            recordedBlobUrl = URL.createObjectURL(blob);
-            audioPlayback.src = recordedBlobUrl;
-            audioPlayerContainer.classList.add('visible');
-            log('Audio-Wiedergabe bereit.', 'success');
-          };
-          mediaRecorder.stop();
-        }
-
-        releaseWakeLock();
-
-        if (wasActive && requestSummary && websocket && websocket.readyState === WebSocket.OPEN) {
-          setStatus('processing', 'Erstelle Zusammenfassung...');
-          isAwaitingSummary = true;
-          textChunkBuffer = '';
-          summaryBox.classList.add('visible');
-          summaryContent.textContent = 'Zusammenfassung wird geladen...';
-
-          websocket.send(JSON.stringify({
-            clientContent: {
-              turns: [{
-                role: 'user',
-                parts: [{
-                  text: 'Erstelle eine strukturierte Zusammenfassung der Besprechung: 1. Kernpunkte, 2. Beschlüsse, 3. Offene Aufgaben/To-Dos mit Zuordnung zu den Sprechern.'
-                }]
+                ]
               }],
-              turnComplete: true
-            }
-          }));
+              generationConfig: {
+                response_mime_type: 'application/json',
+                temperature: 0.1
+              }
+            })
+          });
 
-          setTimeout(() => {
-            cleanupWebSocket();
-            setStatus('', 'Beendet');
-            startBtn.disabled = false;
-          }, 12000);
-        } else {
-          cleanupWebSocket();
-          setStatus('', 'Beendet');
-          startBtn.disabled = false;
-        }
-      }
+          if (!response.ok) {
+            console.warn('Chunk Analyse HTTP-Fehler:', response.status);
+            return;
+          }
 
-      function cleanupWebSocket() {
-        if (websocket) {
-          websocket.onopen = null;
-          websocket.onmessage = null;
-          websocket.onerror = null;
-          websocket.onclose = null;
-          websocket.close();
-          websocket = null;
-        }
-      }
-
-      function cleanupResources() {
-        if (micStream) {
-          micStream.getTracks().forEach(t => t.stop());
-          micStream = null;
-        }
-        if (audioCtx && audioCtx.state !== 'closed') {
-          audioCtx.close().catch(() => {});
-        }
-        cleanupWebSocket();
-        releaseWakeLock();
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      }
-
-      startBtn.addEventListener('click', startLiveSession);
-      stopBtn.addEventListener('click', () => stopLiveSession(true));
-      window.addEventListener('beforeunload', cleanupResources);
-    })();
-  </script>
-</body>
-</html>
+          const resData = await response.json();
+          const rawReply = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!rawReply) return;
