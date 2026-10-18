@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Tracker v0.5.2</title>
+  <title>Gemini Tracker v0.5.3</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -129,9 +129,9 @@
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       color: var(--text-main);
-      padding: 7px 10px;
+      padding: 8px 10px;
       border-radius: 8px;
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       outline: none;
     }
 
@@ -154,6 +154,10 @@
       white-space: nowrap;
     }
 
+    .btn-small:active {
+      filter: brightness(1.2);
+    }
+
     .model-selection-box {
       display: flex;
       flex-direction: column;
@@ -174,7 +178,7 @@
       border: 1px solid var(--border-color);
       color: var(--accent-cyan);
       font-weight: 600;
-      padding: 7px 10px;
+      padding: 8px 10px;
       border-radius: 8px;
       font-size: 0.8rem;
       outline: none;
@@ -480,7 +484,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Tracker <span class="version-tag">v0.5.2</span></h1>
+        <h1>Gemini Tracker <span class="version-tag">v0.5.3</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -490,8 +494,8 @@
 
     <div class="api-input-group">
       <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key..." autocomplete="off">
-      <button id="saveKeyBtn" class="btn-small">Speichern</button>
-      <button id="loadModelsBtn" class="btn-small">Modelle laden</button>
+      <button id="saveKeyBtn" class="btn-small" type="button">Speichern</button>
+      <button id="loadModelsBtn" class="btn-small" type="button">Modelle laden</button>
     </div>
 
     <div class="model-selection-box">
@@ -499,18 +503,17 @@
         <span>Aktives Modell:</span>
         <span id="modelCountLabel">(Bitte erst laden)</span>
       </div>
-      <!-- Initial komplett leer -->
       <select id="modelSelect" class="model-select">
         <option value="">-- Keine Modelle geladen. Bitte auf 'Modelle laden' tippen --</option>
       </select>
     </div>
 
     <div class="controls-panel">
-      <button id="startBtn" class="btn-action btn-start">
+      <button id="startBtn" class="btn-action btn-start" type="button">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
         Aufnahme
       </button>
-      <button id="stopBtn" class="btn-action btn-stop" disabled>
+      <button id="stopBtn" class="btn-action btn-stop" type="button" disabled>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
         Beenden
       </button>
@@ -520,7 +523,7 @@
   <div id="audioPlayerContainer" class="audio-player-container">
     <div class="player-row">
       <audio id="audioPlayback" controls preload="metadata"></audio>
-      <button id="downloadTranscriptBtn" class="btn-small">Transkript (.txt)</button>
+      <button id="downloadTranscriptBtn" class="btn-small" type="button">Transkript (.txt)</button>
     </div>
   </div>
 
@@ -559,110 +562,113 @@
   </main>
 
   <script>
-    (() => {
+    // Globaler Notfall-Handler für Fehlerabfang
+    window.addEventListener('error', function(e) {
+      const banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.textContent = 'JS-Fehler: ' + e.message + ' in Zeile ' + e.lineno;
+        banner.style.display = 'block';
+      }
+    });
+
+    (function() {
       'use strict';
 
-      const CHUNK_INTERVAL_MS = 8000;
-      let micStream = null;
-      let totalMediaRecorder = null;
-      let totalAudioChunks = [];
-      let totalAudioBlobUrl = null;
-      let isRecording = false;
-      let recordingStartTime = 0;
-      let wakeLock = null;
+      var CHUNK_INTERVAL_MS = 8000;
+      var micStream = null;
+      var totalMediaRecorder = null;
+      var totalAudioChunks = [];
+      var totalAudioBlobUrl = null;
+      var isRecording = false;
+      var recordingStartTime = 0;
+      var wakeLock = null;
 
-      const transcriptEntries = [];
-      let currentTopics = [];
+      var transcriptEntries = [];
+      var currentTopics = [];
 
-      const apiKeyInput = document.getElementById('apiKeyInput');
-      const saveKeyBtn = document.getElementById('saveKeyBtn');
-      const loadModelsBtn = document.getElementById('loadModelsBtn');
-      const modelSelect = document.getElementById('modelSelect');
-      const modelCountLabel = document.getElementById('modelCountLabel');
-      const startBtn = document.getElementById('startBtn');
-      const stopBtn = document.getElementById('stopBtn');
-      const statusBadge = document.getElementById('statusBadge');
-      const statusText = document.getElementById('statusText');
-      const transcriptContainer = document.getElementById('transcriptContainer');
-      const summaryBox = document.getElementById('summaryBox');
-      const summaryContent = document.getElementById('summaryContent');
-      const errorBanner = document.getElementById('errorBanner');
-      const audioPlayerContainer = document.getElementById('audioPlayerContainer');
-      const audioPlayback = document.getElementById('audioPlayback');
-      const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
-      const threadsList = document.getElementById('threadsList');
-      const threadCountBadge = document.getElementById('threadCountBadge');
-      const mainScroll = document.getElementById('mainScroll');
-      const debugLogView = document.getElementById('debugLogView');
-      const copyLogBtn = document.getElementById('copyLogBtn');
-      const clearLogBtn = document.getElementById('clearLogBtn');
+      var apiKeyInput = document.getElementById('apiKeyInput');
+      var saveKeyBtn = document.getElementById('saveKeyBtn');
+      var loadModelsBtn = document.getElementById('loadModelsBtn');
+      var modelSelect = document.getElementById('modelSelect');
+      var modelCountLabel = document.getElementById('modelCountLabel');
+      var startBtn = document.getElementById('startBtn');
+      var stopBtn = document.getElementById('stopBtn');
+      var statusBadge = document.getElementById('statusBadge');
+      var statusText = document.getElementById('statusText');
+      var transcriptContainer = document.getElementById('transcriptContainer');
+      var summaryBox = document.getElementById('summaryBox');
+      var summaryContent = document.getElementById('summaryContent');
+      var errorBanner = document.getElementById('errorBanner');
+      var audioPlayerContainer = document.getElementById('audioPlayerContainer');
+      var audioPlayback = document.getElementById('audioPlayback');
+      var downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
+      var threadsList = document.getElementById('threadsList');
+      var threadCountBadge = document.getElementById('threadCountBadge');
+      var mainScroll = document.getElementById('mainScroll');
+      var debugLogView = document.getElementById('debugLogView');
+      var copyLogBtn = document.getElementById('copyLogBtn');
+      var clearLogBtn = document.getElementById('clearLogBtn');
 
-      function log(message, type = 'info') {
-        const time = new Date().toISOString().split('T')[1].replace('Z', '');
-        const entry = document.createElement('div');
-        entry.className = `log-entry log-${type}`;
-        entry.textContent = `[${time}] ${message}`;
-        debugLogView.appendChild(entry);
-        debugLogView.scrollTop = debugLogView.scrollHeight;
-      }
-
-      copyLogBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = Array.from(debugLogView.children).map(c => c.textContent).join('\n');
-        navigator.clipboard.writeText(text).then(() => {
-          showError('Logs in Zwischenablage kopiert.', false);
-        }).catch(() => {
-          showError('Kopieren fehlgeschlagen.');
-        });
-      });
-
-      clearLogBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        debugLogView.innerHTML = '';
-        log('Log-Konsole geleert.');
-      });
-
-      log('App gestartet (v0.5.2).');
-
-      const savedKey = localStorage.getItem('gemini_api_key');
-      if (savedKey) {
-        apiKeyInput.value = savedKey;
-        log('Gespeicherter API-Key geladen.');
-      }
-
-      saveKeyBtn.addEventListener('click', () => {
-        const k = apiKeyInput.value.trim();
-        if (k) {
-          localStorage.setItem('gemini_api_key', k);
-          log('API-Key lokal gesichert.', 'success');
-          showError('API-Key erfolgreich gespeichert.', false);
-        } else {
-          showError('Bitte erst einen Schlüssel eingeben.');
+      function log(message, type) {
+        type = type || 'info';
+        var now = new Date();
+        var timeStr = now.toTimeString().split(' ')[0] + '.' + ('00' + now.getMilliseconds()).slice(-3);
+        var entry = document.createElement('div');
+        entry.className = 'log-entry log-' + type;
+        entry.textContent = '[' + timeStr + '] ' + message;
+        if (debugLogView) {
+          debugLogView.appendChild(entry);
+          debugLogView.scrollTop = debugLogView.scrollHeight;
         }
-      });
-
-      function setStatus(st, txt) {
-        statusBadge.className = 'badge-status ' + st;
-        statusText.textContent = txt;
       }
 
-      function showError(msg, isErr = true) {
+      function showError(msg, isErr) {
+        if (isErr === undefined) isErr = true;
+        if (!errorBanner) return;
         errorBanner.textContent = msg;
         errorBanner.style.backgroundColor = isErr ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
         errorBanner.style.borderColor = isErr ? 'var(--accent-red)' : 'var(--accent-green)';
         errorBanner.style.color = isErr ? '#fca5a5' : '#6ee7b7';
-        errorBanner.classList.add('visible');
-        if (!isErr) setTimeout(() => errorBanner.classList.remove('visible'), 3000);
+        errorBanner.style.display = 'block';
+        if (!isErr) {
+          setTimeout(function() {
+            errorBanner.style.display = 'none';
+          }, 3000);
+        }
       }
 
       function clearError() {
-        errorBanner.classList.remove('visible');
+        if (errorBanner) errorBanner.style.display = 'none';
+      }
+
+      function setStatus(st, txt) {
+        if (statusBadge) statusBadge.className = 'badge-status ' + st;
+        if (statusText) statusText.textContent = txt;
       }
 
       function formatTime(sec) {
-        const m = Math.floor(sec / 60).toString().padStart(2, '0');
-        const s = Math.floor(sec % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+      }
+
+      function escapeHtml(str) {
+        return (str || '').replace(/[&<>'"]/g, function(tag) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag;
+        });
+      }
+
+      function blobToBase64(blob) {
+        return new Promise(function(resolve, reject) {
+          var reader = new FileReader();
+          reader.onloadend = function() {
+            var res = reader.result;
+            var commaIdx = res.indexOf(',');
+            resolve(commaIdx !== -1 ? res.slice(commaIdx + 1) : res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
       }
 
       async function requestWakeLock() {
@@ -671,36 +677,67 @@
             wakeLock = await navigator.wakeLock.request('screen');
             log('Wake Lock aktiv.', 'info');
           } catch (e) {
-            log('Wake Lock nicht verfügbar: ' + e.message, 'warn');
+            log('Wake Lock Info: ' + e.message, 'warn');
           }
         }
       }
 
       function releaseWakeLock() {
         if (wakeLock) {
-          wakeLock.release().catch(() => {});
+          wakeLock.release().catch(function() {});
           wakeLock = null;
         }
       }
 
-      function blobToBase64(blob) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
+      // 1. Initialisierung beim Laden
+      try {
+        log('App gestartet (v0.5.3).', 'info');
+        var savedKey = localStorage.getItem('gemini_api_key');
+        if (savedKey && apiKeyInput) {
+          apiKeyInput.value = savedKey;
+          log('Gespeicherter API-Key geladen.', 'success');
+        }
+      } catch (e) {
+        log('Fehler beim Laden des Keys: ' + e.message, 'error');
+      }
+
+      // 2. Buttons verdrahten
+      if (copyLogBtn) {
+        copyLogBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var text = Array.from(debugLogView.children).map(function(c) { return c.textContent; }).join('\n');
+          navigator.clipboard.writeText(text).then(function() {
+            showError('Logs in Zwischenablage kopiert.', false);
+          }).catch(function() {
+            showError('Kopieren fehlgeschlagen.');
+          });
         });
       }
 
-      function escapeHtml(str) {
-        return (str || '').replace(/[&<>'"]/g, 
-          tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-        );
+      if (clearLogBtn) {
+        clearLogBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          debugLogView.innerHTML = '';
+          log('Log geleert.', 'info');
+        });
       }
 
-      // Lädt dynamisch die Modelle und filtert nach generateContent-Fähigkeit
+      if (saveKeyBtn) {
+        saveKeyBtn.addEventListener('click', function() {
+          var k = apiKeyInput.value.trim();
+          if (k) {
+            localStorage.setItem('gemini_api_key', k);
+            log('API-Key gespeichert.', 'success');
+            showError('API-Key erfolgreich gespeichert.', false);
+          } else {
+            showError('Bitte erst einen Schlüssel eingeben.');
+          }
+        });
+      }
+
+      // 3. Dynamische Modell-Abfrage
       async function populateModelsFromAPI() {
-        const apiKey = apiKeyInput.value.trim();
+        var apiKey = apiKeyInput.value.trim();
         if (!apiKey) {
           showError('Bitte erst den Google AI Studio API-Key eingeben.');
           return;
@@ -708,278 +745,25 @@
 
         clearError();
         log('Lade Modelle von Google API...', 'info');
-        modelCountLabel.textContent = '(Lade...)';
+        if (modelCountLabel) modelCountLabel.textContent = '(Lade...)';
 
-        const endpoints = [
-          { ver: 'v1beta', url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}` },
-          { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` }
+        var endpoints = [
+          { ver: 'v1beta', url: 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey },
+          { ver: 'v1alpha', url: 'https://generativelanguage.googleapis.com/v1alpha/models?key=' + apiKey }
         ];
 
-        const validModels = [];
-        const seen = new Set();
+        var validModels = [];
+        var seen = {};
 
-        for (const ep of endpoints) {
+        for (var i = 0; i < endpoints.length; i++) {
+          var ep = endpoints[i];
           try {
-            const res = await fetch(ep.url);
+            var res = await fetch(ep.url);
             if (res.ok) {
-              const data = await res.json();
-              const list = data.models || [];
+              var data = await res.json();
+              var list = data.models || [];
 
-              for (const m of list) {
-                const methods = m.supportedGenerationMethods || [];
-                // Nur Modelle übernehmen, die Text generieren können
-                const canGenerate = methods.includes('generateContent') || methods.length === 0;
-                
-                if (canGenerate) {
-                  const modelId = m.name.replace(/^models\//, '');
-                  const key = `${modelId}|${ep.ver}`;
-
-                  if (!seen.has(key)) {
-                    seen.add(key);
-                    const isFlash = modelId.includes('flash');
-                    validModels.push({
-                      id: modelId,
-                      fullName: m.name,
-                      version: ep.ver,
-                      displayName: m.displayName || modelId,
-                      isFlash: isFlash
-                    });
-                  }
-                }
-              }
-            } else {
-              log(`Fehler bei [${ep.ver}]: HTTP ${res.status}`, 'warn');
-            }
-          } catch (e) {
-            log(`Netzwerkfehler [${ep.ver}]: ${e.message}`, 'error');
-          }
-        }
-
-        if (validModels.length === 0) {
-          showError('Keine kompatiblen Modelle gefunden. Bitte Key prüfen.');
-          modelCountLabel.textContent = '(Fehlgeschlagen)';
-          return;
-        }
-
-        // Sortierung: Flash-Modelle ganz nach oben
-        validModels.sort((a, b) => {
-          if (a.isFlash && !b.isFlash) return -1;
-          if (!a.isFlash && b.isFlash) return 1;
-          return a.id.localeCompare(b.id);
-        });
-
-        modelSelect.innerHTML = '';
-
-        // Gruppe: Empfohlene Modelle
-        const flashGroup = document.createElement('optgroup');
-        flashGroup.label = '⭐ Empfohlene Modelle (Schnell & Günstig)';
-
-        // Gruppe: Alle weiteren Modelle
-        const otherGroup = document.createElement('optgroup');
-        otherGroup.label = `Weitere Modelle deines Accounts (${validModels.length})`;
-
-        validModels.forEach((m, idx) => {
-          const opt = document.createElement('option');
-          opt.value = JSON.stringify({ name: m.id, version: m.version });
-          opt.textContent = `${m.isFlash ? '⭐ ' : ''}${m.id} (${m.version})`;
-          
-          if (idx === 0) opt.selected = true;
-
-          if (m.isFlash) {
-            flashGroup.appendChild(opt);
-          } else {
-            otherGroup.appendChild(opt);
-          }
-        });
-
-        if (flashGroup.children.length > 0) modelSelect.appendChild(flashGroup);
-        if (otherGroup.children.length > 0) modelSelect.appendChild(otherGroup);
-
-        modelCountLabel.textContent = `(${validModels.length} bereit)`;
-        log(`Dropdown erfolgreich mit ${validModels.length} Modellen befüllt.`, 'success');
-        showError(`${validModels.length} Modelle geladen und bereit.`, false);
-      }
-
-      loadModelsBtn.addEventListener('click', populateModelsFromAPI);
-
-      function renderTopics(topics) {
-        if (!topics || topics.length === 0) return;
-        currentTopics = topics;
-        threadsList.innerHTML = '';
-        
-        let openCount = 0;
-        topics.forEach(t => {
-          const isClosed = (t.status || '').toUpperCase() === 'BESCHLOSSEN' || (t.status || '').toUpperCase() === 'ABGESCHLOSSEN';
-          if (!isClosed) openCount++;
-
-          const item = document.createElement('div');
-          item.className = 'thread-item';
-
-          const badge = document.createElement('span');
-          badge.className = `thread-status-badge ${isClosed ? 'status-closed' : 'status-open'}`;
-          badge.textContent = isClosed ? '✓ Beschlossen' : '⏳ Noch offen';
-
-          const desc = document.createElement('div');
-          desc.className = 'thread-text';
-          desc.innerHTML = `<strong>${escapeHtml(t.topic)}</strong>${t.details ? ': ' + escapeHtml(t.details) : ''}`;
-
-          item.appendChild(badge);
-          item.appendChild(desc);
-          threadsList.appendChild(item);
-        });
-
-        threadCountBadge.textContent = `${openCount} Thema/Themen offen`;
-      }
-
-      function appendTranscriptItem(speaker, text, timeSec) {
-        transcriptEntries.push({ speaker, text, timeSec });
-
-        const item = document.createElement('div');
-        item.className = 'transcript-item';
-
-        const meta = document.createElement('div');
-        meta.className = 'transcript-meta';
-
-        const spk = document.createElement('span');
-        spk.className = 'speaker-tag';
-        spk.setAttribute('data-speaker', speaker);
-        spk.textContent = speaker;
-
-        const timeBtn = document.createElement('button');
-        timeBtn.className = 'timestamp-btn';
-        timeBtn.textContent = `⏱️ ${formatTime(timeSec)}`;
-        timeBtn.onclick = () => {
-          if (audioPlayback.src) {
-            audioPlayback.currentTime = timeSec;
-            audioPlayback.play();
-          }
-        };
-
-        meta.appendChild(spk);
-        meta.appendChild(timeBtn);
-
-        const content = document.createElement('div');
-        content.className = 'transcript-text';
-        content.textContent = text;
-
-        item.appendChild(meta);
-        item.appendChild(content);
-        transcriptContainer.appendChild(item);
-
-        mainScroll.scrollTop = mainScroll.scrollHeight;
-      }
-
-      // Analysiert das Audio-Snippet
-      async function analyzeAudioChunk(audioBlob, chunkStartSec) {
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) return;
-
-        if (!modelSelect.value) {
-          log('Kein Modell ausgewählt. Bitte vor der Aufnahme Modelle laden!', 'error');
-          return;
-        }
-
-        const modelConfig = JSON.parse(modelSelect.value);
-        const modelId = modelConfig.name.replace(/^models\//, '');
-        const apiVersion = modelConfig.version || 'v1beta';
-
-        try {
-          const base64Audio = await blobToBase64(audioBlob);
-          const knownTopicsSummary = currentTopics.map(t => `- ${t.topic} (${t.status})`).join('\n');
-
-          const promptText = `
-Du bist ein deutscher Besprechungs-Protokollant.
-Aufgaben:
-1. Transkribiere das Gesagte auf Deutsch. Unterscheide Sprecher konsistent als "Sprecher A", "Sprecher B" etc. oder konkrete Namen wenn genannt.
-2. Analysiere Themenstränge: Was wird besprochen? Ist es "OFFEN" (Diskussion läuft noch, keine Entscheidung/Einigung) oder "BESCHLOSSEN" (Entscheidung/Konsens getroffen)?
-Bisherige Themen:
-${knownTopicsSummary || 'Noch keine'}
-
-Antworte zwingend als reines JSON im folgenden Schema:
-{
-  "dialog": [
-    {"speaker": "Sprecher A", "text": "Gesagter deutscher Inhalt..."}
-  ],
-  "topics": [
-    {"topic": "Themenname", "status": "OFFEN" oder "BESCHLOSSEN", "details": "Aktueller Stand oder Beschluss"}
-  ]
-}`;
-
-          // Offizielle Google REST-Syntax: /v1beta/models/{modelId}:generateContent
-          const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelId}:generateContent?key=${apiKey}`;
-
-          log(`Sende Snippet (${formatTime(chunkStartSec)}) an ${modelId} [${apiVersion}]...`, 'info');
-
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: promptText },
-                  {
-                    inline_data: {
-                      mime_type: audioBlob.type || 'audio/webm',
-                      data: base64Audio
-                    }
-                  }
-                ]
-              }],
-              generationConfig: {
-                response_mime_type: 'application/json',
-                temperature: 0.1
-              }
-            })
-          });
-
-          if (!response.ok) {
-            const errText = await response.text();
-            log(`Analyse-Fehler (HTTP ${response.status}): ${errText}`, 'error');
-            return;
-          }
-
-          const resData = await response.json();
-          const rawReply = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!rawReply) return;
-
-          const parsed = JSON.parse(rawReply);
-
-          if (Array.isArray(parsed.dialog)) {
-            parsed.dialog.forEach(d => {
-              if (d.text && d.text.trim()) {
-                appendTranscriptItem(d.speaker || 'Sprecher', d.text, chunkStartSec);
-                log(`[${d.speaker}]: ${d.text}`, 'success');
-              }
-            });
-          }
-
-          if (Array.isArray(parsed.topics) && parsed.topics.length > 0) {
-            renderTopics(parsed.topics);
-          }
-
-        } catch (err) {
-          log('Fehler bei Snippet-Verarbeitung: ' + err.message, 'warn');
-        }
-      }
-
-      function startSlicePipeline() {
-        let snippetRecorder = null;
-        let snippetChunks = [];
-
-        function recordNextSnippet() {
-          if (!isRecording) return;
-          snippetChunks = [];
-          const chunkStartTime = (Date.now() - recordingStartTime) / 1000;
-
-          try {
-            snippetRecorder = new MediaRecorder(micStream);
-            snippetRecorder.ondataavailable = (e) => {
-              if (e.data.size > 0) snippetChunks.push(e.data);
-            };
-            snippetRecorder.onstop = () => {
-              if (snippetChunks.length > 0) {
-                const blob = new Blob(snippetChunks, { type: snippetRecorder.mimeType || 'audio/webm' });
-                analyzeAudioChunk(blob, chunkStartTime);
-              }
-            };
-            snippetRecorder.start(
+              for (var j = 0; j < list.length; j++) {
+                var m = list[j];
+                var methods = m.supportedGenerationMethods || [];
+                var canGenerate =
