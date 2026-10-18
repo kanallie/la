@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Transcriber v0.4.4</title>
+  <title>Gemini Transcriber v0.4.5</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -46,10 +46,10 @@
     header {
       background-color: var(--bg-surface);
       border-bottom: 1px solid var(--border-color);
-      padding: 12px 16px;
+      padding: 10px 14px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       flex-shrink: 0;
     }
 
@@ -60,12 +60,12 @@
     }
 
     .title-area h1 {
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 700;
       color: #fff;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .version-tag {
@@ -127,7 +127,7 @@
 
     .api-input-group {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
 
     .api-input {
@@ -135,9 +135,9 @@
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       color: var(--text-main);
-      padding: 8px 12px;
+      padding: 7px 10px;
       border-radius: 8px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       outline: none;
     }
 
@@ -149,38 +149,48 @@
       background-color: var(--border-color);
       color: #fff;
       border: none;
-      padding: 0 12px;
+      padding: 0 10px;
       border-radius: 8px;
       font-weight: 600;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      white-space: nowrap;
     }
 
-    .model-selection-row {
+    .model-selection-box {
       display: flex;
-      gap: 8px;
-      align-items: center;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .model-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
     }
 
     .model-select {
-      flex: 1;
+      width: 100%;
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       color: var(--accent-cyan);
       font-weight: 600;
-      padding: 8px 10px;
+      padding: 7px 10px;
       border-radius: 8px;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       outline: none;
     }
 
     .controls-panel {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 10px;
+      margin-top: 2px;
     }
 
     .btn-action {
@@ -188,9 +198,9 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 12px;
+      padding: 10px;
       border-radius: 10px;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       font-weight: 700;
       border: none;
       cursor: pointer;
@@ -221,7 +231,7 @@
 
     .audio-player-container {
       background-color: var(--bg-surface);
-      padding: 8px 16px;
+      padding: 8px 14px;
       border-bottom: 1px solid var(--border-color);
       display: none;
     }
@@ -240,14 +250,14 @@
       background-color: #050811;
       border: 1px solid var(--border-color);
       border-radius: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       overflow: hidden;
     }
 
     .debug-summary {
       background-color: var(--bg-surface);
-      padding: 8px 12px;
-      font-size: 0.8rem;
+      padding: 6px 12px;
+      font-size: 0.78rem;
       font-weight: 700;
       color: var(--accent-cyan);
       cursor: pointer;
@@ -277,14 +287,14 @@
       font-family: monospace;
       font-size: 0.72rem;
       line-height: 1.4;
-      max-height: 220px;
+      max-height: 200px;
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-all;
       color: #94a3b8;
     }
 
-    .log-entry { margin-bottom: 4px; }
+    .log-entry { margin-bottom: 3px; }
     .log-info { color: #38bdf8; }
     .log-success { color: #4ade80; }
     .log-warn { color: #facc15; }
@@ -293,10 +303,10 @@
     main {
       flex: 1;
       overflow-y: auto;
-      padding: 16px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       scroll-behavior: smooth;
     }
 
@@ -304,7 +314,7 @@
       background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
       border: 1px solid var(--accent-cyan);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px;
       display: none;
     }
 
@@ -313,19 +323,19 @@
     }
 
     .summary-header {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 700;
       color: var(--accent-cyan);
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 6px;
     }
 
     .summary-content {
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       color: #e2e8f0;
       white-space: pre-wrap;
       line-height: 1.45;
@@ -334,17 +344,17 @@
     .transcript-stream {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .transcript-item {
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 10px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
     }
 
     .transcript-item.overlap {
@@ -360,9 +370,9 @@
     }
 
     .speaker-tag {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 700;
-      padding: 2px 8px;
+      padding: 2px 6px;
       border-radius: 4px;
       background-color: rgba(255, 255, 255, 0.08);
     }
@@ -374,11 +384,11 @@
 
     .timestamp-btn {
       font-family: monospace;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: var(--text-muted);
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 2px 6px;
+      padding: 2px 5px;
       border-radius: 4px;
       cursor: pointer;
     }
@@ -389,17 +399,17 @@
     }
 
     .overlap-badge {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       font-weight: 600;
       color: var(--accent-amber);
       background: rgba(245, 158, 11, 0.15);
-      padding: 2px 6px;
+      padding: 2px 5px;
       border-radius: 4px;
       margin-left: auto;
     }
 
     .transcript-text {
-      font-size: 0.92rem;
+      font-size: 0.88rem;
       color: var(--text-main);
       word-break: break-word;
     }
@@ -408,10 +418,10 @@
       background-color: rgba(239, 68, 68, 0.15);
       border: 1px solid var(--accent-red);
       color: #fca5a5;
-      padding: 10px 14px;
+      padding: 8px 12px;
       border-radius: 8px;
-      font-size: 0.85rem;
-      margin-bottom: 8px;
+      font-size: 0.82rem;
+      margin-bottom: 6px;
       display: none;
       word-break: break-word;
     }
@@ -426,7 +436,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Transcriber <span class="version-tag">v0.4.4</span></h1>
+        <h1>Gemini Transcriber <span class="version-tag">v0.4.5</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -437,15 +447,18 @@
     <div class="api-input-group">
       <input type="password" id="apiKeyInput" class="api-input" placeholder="Google AI Studio API Key..." autocomplete="off">
       <button id="saveKeyBtn" class="btn-small">Speichern</button>
-      <button id="testModelsBtn" class="btn-small">Modelle prüfen</button>
+      <button id="loadModelsBtn" class="btn-small">Modelle laden</button>
     </div>
 
-    <div class="model-selection-row">
+    <div class="model-selection-box">
+      <div class="model-label">
+        <span>Aktives Modell für Live WebSocket:</span>
+        <span id="modelCountLabel"></span>
+      </div>
       <select id="modelSelect" class="model-select">
-        <option value='{"name":"models/gemini-2.0-flash-realtime-exp","version":"v1beta"}'>gemini-2.0-flash-realtime-exp (v1beta Live)</option>
-        <option value='{"name":"models/gemini-2.0-flash-exp","version":"v1alpha"}'>gemini-2.0-flash-exp (v1alpha)</option>
-        <option value='{"name":"models/gemini-2.5-flash-native-audio-latest","version":"v1beta"}'>gemini-2.5-flash-native-audio-latest (v1beta)</option>
-        <option value='{"name":"models/gemini-2.0-flash","version":"v1beta"}'>gemini-2.0-flash (v1beta)</option>
+        <option value='{"name":"models/gemini-2.0-flash-exp","version":"v1alpha"}'>[Empfohlen] gemini-2.0-flash-exp (v1alpha)</option>
+        <option value='{"name":"models/gemini-2.5-flash-native-audio-latest","version":"v1beta"}'>[Native Audio] gemini-2.5-flash-native-audio-latest (v1beta)</option>
+        <option value='{"name":"models/gemini-2.0-flash-realtime-exp","version":"v1beta"}'>[Realtime] gemini-2.0-flash-realtime-exp (v1beta)</option>
       </select>
     </div>
 
@@ -470,7 +483,7 @@
 
     <details id="debugDetails" class="debug-details" open>
       <summary class="debug-summary">
-        <span>🛠️ Debug-Konsole & API-Logs</span>
+        <span>🛠️ Debug-Konsole</span>
         <div class="debug-actions">
           <button id="copyLogBtn" class="btn-console" type="button">Kopieren</button>
           <button id="clearLogBtn" class="btn-console" type="button">Leeren</button>
@@ -547,8 +560,9 @@
 
       const apiKeyInput = document.getElementById('apiKeyInput');
       const saveKeyBtn = document.getElementById('saveKeyBtn');
-      const testModelsBtn = document.getElementById('testModelsBtn');
+      const loadModelsBtn = document.getElementById('loadModelsBtn');
       const modelSelect = document.getElementById('modelSelect');
+      const modelCountLabel = document.getElementById('modelCountLabel');
       const startBtn = document.getElementById('startBtn');
       const stopBtn = document.getElementById('stopBtn');
       const statusBadge = document.getElementById('statusBadge');
@@ -589,7 +603,7 @@
         log('Log-Konsole geleert.');
       });
 
-      log('App initialisiert (v0.4.4).');
+      log('App gestartet (v0.4.5).');
 
       const savedKey = localStorage.getItem('gemini_api_key');
       if (savedKey) {
@@ -601,7 +615,7 @@
         const key = apiKeyInput.value.trim();
         if (key) {
           localStorage.setItem('gemini_api_key', key);
-          log('API-Key im localStorage gesichert.', 'success');
+          log('API-Key lokal gesichert.', 'success');
           showError('API-Key erfolgreich gespeichert.', false);
         }
       });
@@ -632,7 +646,7 @@
             wakeLock = await navigator.wakeLock.request('screen');
             log('Wake Lock aktiviert.', 'info');
           } catch (err) {
-            log('Wake Lock nicht verfügbar: ' + err.message, 'warn');
+            log('Wake Lock Warnung: ' + err.message, 'warn');
           }
         }
       }
@@ -660,51 +674,98 @@
         return `${m}:${s}`;
       }
 
-      // Gibt alle Modelle der API im Log aus
-      async function queryAvailableModels(apiKey) {
-        log('Frage API-Modelle ab...', 'info');
+      // Holt ALLE Modelle von Google und baut sie ins Dropdown ein
+      async function populateModelsFromAPI(apiKey) {
+        log('Lade alle Modell-Listen von der Google API...', 'info');
         const endpoints = [
-          { ver: 'v1beta', url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}` },
-          { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` }
+          { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` },
+          { ver: 'v1beta', url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}` }
         ];
 
-        let foundAny = false;
+        const allModels = [];
+        const seen = new Set();
+
         for (const ep of endpoints) {
           try {
             const res = await fetch(ep.url);
             if (res.ok) {
               const data = await res.json();
-              const models = data.models || [];
-              log(`=== Verfügbare Modelle in [${ep.ver}] (${models.length}) ===`, 'success');
-              
-              const relevant = [];
-              for (const m of models) {
-                // Filtere nach Flash/Live/Audio
-                if (m.name.includes('flash') || m.name.includes('live') || m.name.includes('realtime') || m.name.includes('audio')) {
-                  relevant.push(m.name);
+              const list = data.models || [];
+              log(`Gefunden in [${ep.ver}]: ${list.length} Modelle.`, 'info');
+
+              for (const m of list) {
+                const key = `${m.name}|${ep.ver}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  allModels.push({
+                    name: m.name,
+                    version: ep.ver,
+                    displayName: m.displayName || m.name.replace('models/', ''),
+                    isAudioOrFlash: m.name.includes('flash') || m.name.includes('audio') || m.name.includes('live') || m.name.includes('realtime')
+                  });
                 }
               }
-              log(`Relevante Modelle [${ep.ver}]:\n` + relevant.join('\n'), 'info');
-              foundAny = true;
             } else {
-              log(`Fehler [${ep.ver}]: HTTP ${res.status}`, 'error');
+              log(`Abfrage [${ep.ver}] HTTP ${res.status}`, 'warn');
             }
           } catch (e) {
-            log(`Netzwerkfehler [${ep.ver}]: ${e.message}`, 'error');
+            log(`Fehler beim Abruf [${ep.ver}]: ${e.message}`, 'error');
           }
         }
-        if (foundAny) {
-          showError('Modell-Liste im Log ausgegeben. Wähle das passende im Dropdown.', false);
-        }
-      }
 
-      testModelsBtn.addEventListener('click', async () => {
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
-          showError('Bitte erst einen Key eintragen.');
+        if (allModels.length === 0) {
+          showError('Keine Modelle von der API empfangen. Key prüfen.');
           return;
         }
-        await queryAvailableModels(apiKey);
+
+        // Sortierung: Flash/Audio/Live zuerst nach oben
+        allModels.sort((a, b) => {
+          if (a.isAudioOrFlash && !b.isAudioOrFlash) return -1;
+          if (!a.isAudioOrFlash && b.isAudioOrFlash) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        // Dropdown leeren und mit echten API-Modellen füllen
+        modelSelect.innerHTML = '';
+
+        // Manuell hinzugefügte primäre Live-Optionen an die Spitze setzen
+        const topDefaults = [
+          { name: 'models/gemini-2.0-flash-exp', version: 'v1alpha', tag: '⭐ Empfohlen (v1alpha Live)' },
+          { name: 'models/gemini-2.5-flash-native-audio-latest', version: 'v1beta', tag: '⭐ Native Audio (v1beta)' },
+          { name: 'models/gemini-2.0-flash-realtime-exp', version: 'v1beta', tag: '⭐ Realtime Exp (v1beta)' }
+        ];
+
+        topDefaults.forEach(def => {
+          const opt = document.createElement('option');
+          opt.value = JSON.stringify({ name: def.name, version: def.version });
+          opt.textContent = `${def.tag}: ${def.name}`;
+          modelSelect.appendChild(opt);
+        });
+
+        // Trennlinie / Gruppe
+        const group = document.createElement('optgroup');
+        group.label = `API-Modelle deines Accounts (${allModels.length} verfügbar)`;
+
+        allModels.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = JSON.stringify({ name: m.name, version: m.version });
+          opt.textContent = `${m.name} (${m.version})`;
+          group.appendChild(opt);
+        });
+
+        modelSelect.appendChild(group);
+        modelCountLabel.textContent = `(${allModels.length} geladen)`;
+        log(`Dropdown mit ${allModels.length} Modellen erfolgreich aktualisiert!`, 'success');
+        showError(`${allModels.length} API-Modelle in Dropdown geladen!`, false);
+      }
+
+      loadModelsBtn.addEventListener('click', async () => {
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+          showError('Bitte erst einen Key eingeben.');
+          return;
+        }
+        await populateModelsFromAPI(apiKey);
       });
 
       function sendAudioChunk(arrayBuffer) {
@@ -804,7 +865,7 @@
         clearError();
         const apiKey = apiKeyInput.value.trim();
         if (!apiKey) {
-          showError('Bitte hinterlege zuerst deinen Google AI Studio API-Key.');
+          showError('Bitte erst den Google AI Studio API-Key hinterlegen.');
           return;
         }
 
@@ -820,9 +881,9 @@
 
         try {
           const selectedModelConfig = JSON.parse(modelSelect.value);
-          log(`Verwende Auswahl: Modell=${selectedModelConfig.name}, API-Version=${selectedModelConfig.version}`, 'info');
+          log(`Start mit Modell: ${selectedModelConfig.name} [${selectedModelConfig.version}]`, 'info');
 
-          setStatus('connecting', 'Initialisiere Audio...');
+          setStatus('connecting', 'Initialisiere Mikrofon...');
           micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               channelCount: 1,
@@ -832,7 +893,7 @@
               autoGainControl: true
             }
           });
-          log('Mikrofon aktiv.', 'success');
+          log('Mikrofon aktiviert.', 'success');
 
           let mimeType = 'audio/webm;codecs=opus';
           if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
@@ -859,7 +920,7 @@
             workletNode.connect(audioCtx.destination);
             log('AudioWorkletNode aktiv.', 'info');
           } catch (workletError) {
-            log('ScriptProcessor Fallback aktiv: ' + workletError.message, 'warn');
+            log('ScriptProcessor Fallback: ' + workletError.message, 'warn');
             scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
             scriptNode.onaudioprocess = (e) => {
               const input = e.inputBuffer.getChannelData(0);
@@ -875,7 +936,7 @@
           }
 
           const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${selectedModelConfig.version}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
-          log(`Verbinde WebSocket: ${selectedModelConfig.version}...`, 'info');
+          log(`Verbinde WebSocket (${selectedModelConfig.version})...`, 'info');
 
           websocket = new WebSocket(wsUrl);
 
@@ -908,7 +969,7 @@
               const resp = JSON.parse(rawData);
 
               if (resp.setupComplete || resp.setup_complete) {
-                log('Handshake SetupComplete empfangen!', 'success');
+                log('🎉 Handshake SetupComplete von Google empfangen!', 'success');
                 isHandshakeComplete = true;
                 recordingStartTime = Date.now();
                 isRecording = true;
@@ -926,12 +987,12 @@
                 }
               }
             } catch (err) {
-              log('JSON Decode Fehler: ' + err.message, 'warn');
+              log('JSON Decode Warnung: ' + err.message, 'warn');
             }
           };
 
           websocket.onerror = (err) => {
-            log('WebSocket Fehler!', 'error');
+            log('WebSocket Fehler aufgetreten!', 'error');
           };
 
           websocket.onclose = (e) => {
@@ -939,7 +1000,7 @@
             if (isRecording || !isHandshakeComplete) {
               let reasonMsg = e.reason ? ` (${e.reason})` : '';
               if (e.code === 1008) {
-                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell nicht zugelassen.'}`);
+                showError(`API-Fehler (1008 Policy Violation): ${reasonMsg || 'Modell wird nicht unterstützt.'}`);
               } else if (!e.wasClean) {
                 showError(`Verbindung getrennt (Code ${e.code}).${reasonMsg}`);
               }
@@ -984,6 +1045,7 @@
             recordedBlobUrl = URL.createObjectURL(blob);
             audioPlayback.src = recordedBlobUrl;
             audioPlayerContainer.classList.add('visible');
+            log('Audio-Wiedergabe bereit.', 'success');
           };
           mediaRecorder.stop();
         }
