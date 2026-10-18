@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gemini Tracker v0.5.1</title>
+  <title>Gemini Tracker v0.5.2</title>
   <style>
     :root {
       --bg-primary: #0a0e17;
@@ -248,7 +248,6 @@
       border-radius: 6px;
     }
 
-    /* Klappbare Konsole */
     .debug-details {
       background-color: #050811;
       border: 1px solid var(--border-color);
@@ -481,7 +480,7 @@
   <header>
     <div class="header-top">
       <div class="title-area">
-        <h1>Gemini Tracker <span class="version-tag">v0.5.1</span></h1>
+        <h1>Gemini Tracker <span class="version-tag">v0.5.2</span></h1>
       </div>
       <div id="statusBadge" class="badge-status">
         <span class="badge-dot"></span>
@@ -500,7 +499,7 @@
         <span>Aktives Modell:</span>
         <span id="modelCountLabel">(Bitte erst laden)</span>
       </div>
-      <!-- Initial leer gelassen, wird via Button "Modelle laden" befüllt -->
+      <!-- Initial komplett leer -->
       <select id="modelSelect" class="model-select">
         <option value="">-- Keine Modelle geladen. Bitte auf 'Modelle laden' tippen --</option>
       </select>
@@ -528,7 +527,6 @@
   <main id="mainScroll">
     <div id="errorBanner" class="error-banner"></div>
 
-    <!-- Ein- und ausklappbare Debug-Konsole (standardmäßig geschlossen) -->
     <details id="debugDetails" class="debug-details">
       <summary class="debug-summary">
         <span>🛠️ Debug-Konsole</span>
@@ -540,7 +538,6 @@
       <div id="debugLogView" class="debug-log-view"></div>
     </details>
 
-    <!-- Live Status der Themen & Gesprächsstränge -->
     <section class="threads-card">
       <div class="threads-header">
         <span>Gesprächsstränge & Status (Live)</span>
@@ -553,13 +550,11 @@
       </div>
     </section>
 
-    <!-- Finale Zusammenfassung -->
     <section id="summaryBox" class="summary-card">
       <div class="summary-header">Zusammenfassung & Beschlüsse</div>
       <div id="summaryContent" class="summary-content">Wird generiert...</div>
     </section>
 
-    <!-- Detailliertes Live-Transkript -->
     <section id="transcriptContainer" class="transcript-stream"></section>
   </main>
 
@@ -627,7 +622,7 @@
         log('Log-Konsole geleert.');
       });
 
-      log('App gestartet (v0.5.1).');
+      log('App gestartet (v0.5.2).');
 
       const savedKey = localStorage.getItem('gemini_api_key');
       if (savedKey) {
@@ -703,7 +698,7 @@
         );
       }
 
-      // Lädt Modelle von Google und baut sie ins Dropdown ein
+      // Lädt dynamisch die Modelle und filtert nach generateContent-Fähigkeit
       async function populateModelsFromAPI() {
         const apiKey = apiKeyInput.value.trim();
         if (!apiKey) {
@@ -720,7 +715,7 @@
           { ver: 'v1alpha', url: `https://generativelanguage.googleapis.com/v1alpha/models?key=${apiKey}` }
         ];
 
-        const allModels = [];
+        const validModels = [];
         const seen = new Set();
 
         for (const ep of endpoints) {
@@ -729,18 +724,27 @@
             if (res.ok) {
               const data = await res.json();
               const list = data.models || [];
-              log(`Modelle gefunden in [${ep.ver}]: ${list.length}`, 'info');
 
               for (const m of list) {
-                const key = `${m.name}|${ep.ver}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  const isFlash = m.name.includes('flash');
-                  allModels.push({
-                    name: m.name,
-                    version: ep.ver,
-                    isFlash: isFlash
-                  });
+                const methods = m.supportedGenerationMethods || [];
+                // Nur Modelle übernehmen, die Text generieren können
+                const canGenerate = methods.includes('generateContent') || methods.length === 0;
+                
+                if (canGenerate) {
+                  const modelId = m.name.replace(/^models\//, '');
+                  const key = `${modelId}|${ep.ver}`;
+
+                  if (!seen.has(key)) {
+                    seen.add(key);
+                    const isFlash = modelId.includes('flash');
+                    validModels.push({
+                      id: modelId,
+                      fullName: m.name,
+                      version: ep.ver,
+                      displayName: m.displayName || modelId,
+                      isFlash: isFlash
+                    });
+                  }
                 }
               }
             } else {
@@ -751,47 +755,49 @@
           }
         }
 
-        if (allModels.length === 0) {
-          showError('Keine Modelle geladen. Bitte Key und Internetverbindung prüfen.');
+        if (validModels.length === 0) {
+          showError('Keine kompatiblen Modelle gefunden. Bitte Key prüfen.');
           modelCountLabel.textContent = '(Fehlgeschlagen)';
           return;
         }
 
-        // Dropdown leeren und mit echten Modellen befüllen
+        // Sortierung: Flash-Modelle ganz nach oben
+        validModels.sort((a, b) => {
+          if (a.isFlash && !b.isFlash) return -1;
+          if (!a.isFlash && b.isFlash) return 1;
+          return a.id.localeCompare(b.id);
+        });
+
         modelSelect.innerHTML = '';
 
-        // Empfohlene Schnelläufer-Modelle ganz nach oben
-        const recommendedGroup = document.createElement('optgroup');
-        recommendedGroup.label = '⭐ Empfohlene Modelle';
+        // Gruppe: Empfohlene Modelle
+        const flashGroup = document.createElement('optgroup');
+        flashGroup.label = '⭐ Empfohlene Modelle (Schnell & Günstig)';
 
-        const recommendations = [
-          { name: 'models/gemini-2.5-flash', version: 'v1beta', label: '⭐ [Empfohlen] gemini-2.5-flash (v1beta)' },
-          { name: 'models/gemini-2.0-flash', version: 'v1beta', label: '⭐ [Stabil] gemini-2.0-flash (v1beta)' }
-        ];
+        // Gruppe: Alle weiteren Modelle
+        const otherGroup = document.createElement('optgroup');
+        otherGroup.label = `Weitere Modelle deines Accounts (${validModels.length})`;
 
-        recommendations.forEach(r => {
+        validModels.forEach((m, idx) => {
           const opt = document.createElement('option');
-          opt.value = JSON.stringify({ name: r.name, version: r.version });
-          opt.textContent = r.label;
-          recommendedGroup.appendChild(opt);
+          opt.value = JSON.stringify({ name: m.id, version: m.version });
+          opt.textContent = `${m.isFlash ? '⭐ ' : ''}${m.id} (${m.version})`;
+          
+          if (idx === 0) opt.selected = true;
+
+          if (m.isFlash) {
+            flashGroup.appendChild(opt);
+          } else {
+            otherGroup.appendChild(opt);
+          }
         });
-        modelSelect.appendChild(recommendedGroup);
 
-        // Alle weiteren aus dem Account
-        const allGroup = document.createElement('optgroup');
-        allGroup.label = `Alle verfügbaren Modelle deines Accounts (${allModels.length})`;
+        if (flashGroup.children.length > 0) modelSelect.appendChild(flashGroup);
+        if (otherGroup.children.length > 0) modelSelect.appendChild(otherGroup);
 
-        allModels.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = JSON.stringify({ name: m.name, version: m.version });
-          opt.textContent = `${m.name} (${m.version})`;
-          allGroup.appendChild(opt);
-        });
-        modelSelect.appendChild(allGroup);
-
-        modelCountLabel.textContent = `(${allModels.length} geladen)`;
-        log(`Dropdown erfolgreich mit ${allModels.length} Modellen befüllt.`, 'success');
-        showError(`${allModels.length} Modelle geladen.`, false);
+        modelCountLabel.textContent = `(${validModels.length} bereit)`;
+        log(`Dropdown erfolgreich mit ${validModels.length} Modellen befüllt.`, 'success');
+        showError(`${validModels.length} Modelle geladen und bereit.`, false);
       }
 
       loadModelsBtn.addEventListener('click', populateModelsFromAPI);
@@ -868,19 +874,21 @@
         const apiKey = apiKeyInput.value.trim();
         if (!apiKey) return;
 
-        let modelConfig = { name: 'models/gemini-2.5-flash', version: 'v1beta' };
-        if (modelSelect.value) {
-          try {
-            modelConfig = JSON.parse(modelSelect.value);
-          } catch (e) {}
+        if (!modelSelect.value) {
+          log('Kein Modell ausgewählt. Bitte vor der Aufnahme Modelle laden!', 'error');
+          return;
         }
+
+        const modelConfig = JSON.parse(modelSelect.value);
+        const modelId = modelConfig.name.replace(/^models\//, '');
+        const apiVersion = modelConfig.version || 'v1beta';
 
         try {
           const base64Audio = await blobToBase64(audioBlob);
           const knownTopicsSummary = currentTopics.map(t => `- ${t.topic} (${t.status})`).join('\n');
 
           const promptText = `
-Du bist ein akribischer deutscher Besprechungs-Protokollant.
+Du bist ein deutscher Besprechungs-Protokollant.
 Aufgaben:
 1. Transkribiere das Gesagte auf Deutsch. Unterscheide Sprecher konsistent als "Sprecher A", "Sprecher B" etc. oder konkrete Namen wenn genannt.
 2. Analysiere Themenstränge: Was wird besprochen? Ist es "OFFEN" (Diskussion läuft noch, keine Entscheidung/Einigung) oder "BESCHLOSSEN" (Entscheidung/Konsens getroffen)?
@@ -897,10 +905,10 @@ Antworte zwingend als reines JSON im folgenden Schema:
   ]
 }`;
 
-          const cleanModelName = modelConfig.name.startsWith('models/') ? modelConfig.name : `models/${modelConfig.name}`;
-          const url = `https://generativelanguage.googleapis.com/${modelConfig.version}/${cleanModelName}:generateContent?key=${apiKey}`;
+          // Offizielle Google REST-Syntax: /v1beta/models/{modelId}:generateContent
+          const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelId}:generateContent?key=${apiKey}`;
 
-          log(`Sende Snippet (${formatTime(chunkStartSec)}) an ${cleanModelName}...`, 'info');
+          log(`Sende Snippet (${formatTime(chunkStartSec)}) an ${modelId} [${apiVersion}]...`, 'info');
 
           const response = await fetch(url, {
             method: 'POST',
@@ -925,7 +933,8 @@ Antworte zwingend als reines JSON im folgenden Schema:
           });
 
           if (!response.ok) {
-            log(`Analyse-Fehler: HTTP ${response.status} ${response.statusText}`, 'error');
+            const errText = await response.text();
+            log(`Analyse-Fehler (HTTP ${response.status}): ${errText}`, 'error');
             return;
           }
 
@@ -973,196 +982,4 @@ Antworte zwingend als reines JSON im folgenden Schema:
                 analyzeAudioChunk(blob, chunkStartTime);
               }
             };
-            snippetRecorder.start();
-
-            setTimeout(() => {
-              if (snippetRecorder && snippetRecorder.state === 'recording') {
-                snippetRecorder.stop();
-              }
-              if (isRecording) {
-                recordNextSnippet();
-              }
-            }, CHUNK_INTERVAL_MS);
-
-          } catch (e) {
-            log('Fehler im Snippet-Recorder: ' + e.message, 'error');
-          }
-        }
-
-        recordNextSnippet();
-      }
-
-      async function startMeeting() {
-        clearError();
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
-          showError('Bitte erst den Google AI Studio API-Key eingeben.');
-          return;
-        }
-
-        transcriptContainer.innerHTML = '';
-        transcriptEntries.length = 0;
-        currentTopics = [];
-        threadsList.innerHTML = '';
-        summaryBox.classList.remove('visible');
-        audioPlayerContainer.classList.remove('visible');
-        totalAudioChunks = [];
-        threadCountBadge.textContent = 'Analysiere laufendes Gespräch...';
-
-        log('Starte Besprechungsaufnahme...', 'info');
-
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              channelCount: 1,
-              sampleRate: 16000,
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          });
-          log('Mikrofon aktiviert.', 'success');
-
-          totalMediaRecorder = new MediaRecorder(micStream);
-          totalMediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) totalAudioChunks.push(e.data);
-          };
-          totalMediaRecorder.start(1000);
-
-          recordingStartTime = Date.now();
-          isRecording = true;
-          await requestWakeLock();
-
-          startBtn.disabled = true;
-          stopBtn.disabled = false;
-          setStatus('live', 'Live-Analyse aktiv');
-
-          startSlicePipeline();
-
-        } catch (err) {
-          log('Mikrofon-Fehler: ' + err.message, 'error');
-          showError('Mikrofonzugriff verweigert oder Fehler: ' + err.message);
-          setStatus('', 'Bereit');
-        }
-      }
-
-      async function stopMeeting() {
-        if (!isRecording) return;
-        isRecording = false;
-        setStatus('processing', 'Erstelle Abschluss-Zusammenfassung...');
-        stopBtn.disabled = true;
-        log('Besprechung gestoppt. Erstelle Zusammenfassung...', 'info');
-
-        if (micStream) {
-          micStream.getTracks().forEach(t => t.stop());
-        }
-
-        releaseWakeLock();
-
-        if (totalMediaRecorder && totalMediaRecorder.state !== 'inactive') {
-          totalMediaRecorder.onstop = () => {
-            const blob = new Blob(totalAudioChunks, { type: totalMediaRecorder.mimeType || 'audio/webm' });
-            if (totalAudioBlobUrl) URL.revokeObjectURL(totalAudioBlobUrl);
-            totalAudioBlobUrl = URL.createObjectURL(blob);
-            audioPlayback.src = totalAudioBlobUrl;
-            audioPlayerContainer.classList.add('visible');
-            log('Vollständige Aufnahme im Audio-Player bereit.', 'success');
-          };
-          totalMediaRecorder.stop();
-        }
-
-        await generateFinalSummary();
-
-        setStatus('', 'Abgeschlossen');
-        startBtn.disabled = false;
-      }
-
-      async function generateFinalSummary() {
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey || transcriptEntries.length === 0) {
-          summaryBox.classList.add('visible');
-          summaryContent.textContent = 'Keine Transkriptionen vorhanden, die zusammengefasst werden können.';
-          return;
-        }
-
-        summaryBox.classList.add('visible');
-        summaryContent.textContent = 'Formuliere finale deutsche Zusammenfassung und Beschlussliste...';
-
-        let modelConfig = { name: 'models/gemini-2.5-flash', version: 'v1beta' };
-        if (modelSelect.value) {
-          try {
-            modelConfig = JSON.parse(modelSelect.value);
-          } catch (e) {}
-        }
-
-        const fullText = transcriptEntries.map(e => `[${formatTime(e.timeSec)}] ${e.speaker}: ${e.text}`).join('\n');
-
-        const prompt = `
-Erstelle eine strukturierte Besprechungs-Zusammenfassung auf Deutsch basierend auf folgendem Verlauf:
-${fullText}
-
-Gliederung:
-1. KERNPUNKTE & THEMEN
-2. GETROFFENE BESCHLÜSSE (mit Zuordnung zu Personen/Sprechern)
-3. OFFENE THEMEN & UNGEKLÄRTE DISKUSSIONEN (Was muss noch entschieden werden?)
-4. AUFGABEN / TO-DOS`;
-
-        const cleanModelName = modelConfig.name.startsWith('models/') ? modelConfig.name : `models/${modelConfig.name}`;
-        const url = `https://generativelanguage.googleapis.com/${modelConfig.version}/${cleanModelName}:generateContent?key=${apiKey}`;
-
-        try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }]
-            })
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Keine Antwort erhalten.';
-            summaryContent.textContent = text;
-            log('Zusammenfassung erfolgreich erstellt.', 'success');
-          } else {
-            summaryContent.textContent = 'Fehler beim Erstellen der Zusammenfassung: ' + res.statusText;
-            log('Fehler bei Zusammenfassung: HTTP ' + res.status, 'error');
-          }
-        } catch (e) {
-          summaryContent.textContent = 'Netzwerkfehler bei Zusammenfassung: ' + e.message;
-          log('Netzwerkfehler: ' + e.message, 'error');
-        }
-      }
-
-      downloadTranscriptBtn.addEventListener('click', () => {
-        if (transcriptEntries.length === 0) {
-          showError('Kein Transkript vorhanden.');
-          return;
-        }
-
-        let doc = `=== BESPRECHUNGSPROTOKOLL ===\nDatum: ${new Date().toLocaleString('de-DE')}\n\n`;
-        doc += `=== ZUSAMMENFASSUNG & BESCHLÜSSE ===\n${summaryContent.textContent}\n\n`;
-        doc += `=== THEMENSTATUS ===\n`;
-        currentTopics.forEach(t => {
-          doc += `[${t.status}] ${t.topic}: ${t.details || ''}\n`;
-        });
-        doc += `\n=== VOLLSTÄNDIGES TRANSKRIPT ===\n`;
-        transcriptEntries.forEach(e => {
-          doc += `[${formatTime(e.timeSec)}] ${e.speaker}: ${e.text}\n`;
-        });
-
-        const blob = new Blob([doc], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Meeting_Protokoll_${new Date().toISOString().slice(0,10)}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-
-      startBtn.addEventListener('click', startMeeting);
-      stopBtn.addEventListener('click', stopMeeting);
-    })();
-  </script>
-</body>
-</html>
+            snippetRecorder.start(
